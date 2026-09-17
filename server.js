@@ -95,6 +95,25 @@ function processPendingLinks(pendingList) {
     }
 }
 
+let pendingActions = [];
+
+function syncBGLFromPlayers(players) {
+    if (!Array.isArray(players)) return;
+    let modified = false;
+    for (const p of players) {
+        if (!p || !p.name) continue;
+        const linked = db.users.find(u => u.linkedGrowId && u.linkedGrowId.toLowerCase() === p.name.toLowerCase());
+        if (linked) {
+            const newBgl = typeof p.bgl === 'number' ? p.bgl : (linked.bglBalance || 0);
+            if (linked.bglBalance !== newBgl) {
+                linked.bglBalance = newBgl;
+                modified = true;
+            }
+        }
+    }
+    if (modified) saveDatabase(db);
+}
+
 // Inbound push from GTPS Lua
 app.all('/api/sync', (req, res) => {
     console.log(`[DEBUG-RENDER] /api/sync hit with method: ${req.method}, query:`, req.query, 'body:', req.body);
@@ -104,23 +123,26 @@ app.all('/api/sync', (req, res) => {
             status: "ONLINE",
             lastHeartbeat: Date.now(),
             port: data.port || GTPS_PORT,
-            playerCount: data.playerCount || (data.players ? data.players.length : 0),
+            playerCount: typeof data.playerCount === 'number' ? data.playerCount : (data.players ? data.players.length : 0),
             players: data.players || [],
             logs: data.logs || serverData.logs || []
         };
+        syncBGLFromPlayers(serverData.players);
     }
 
     if (data.pendingLinks) {
         processPendingLinks(data.pendingLinks);
     }
 
-    const publicUsers = db.users.map(u => ({ username: u.username, code: u.uniqueCode, linkedGrowId: u.linkedGrowId }));
+    const actionsToSend = pendingActions.splice(0);
+    const publicUsers = db.users.map(u => ({ username: u.username, code: u.uniqueCode, linkedGrowId: u.linkedGrowId, bglBalance: u.bglBalance || 0 }));
     return res.json({
         success: true,
         status: serverData.status,
         playerCount: serverData.playerCount,
         usersCount: publicUsers.length,
         users: publicUsers,
+        pendingActions: actionsToSend,
         serverData: serverData
     });
 });
@@ -131,8 +153,9 @@ async function pollGTPSCloud() {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 3500);
 
-        const publicUsers = db.users.map(u => ({ username: u.username, code: u.uniqueCode, linkedGrowId: u.linkedGrowId }));
-        const pushPayload = JSON.stringify({ users: publicUsers });
+        const publicUsers = db.users.map(u => ({ username: u.username, code: u.uniqueCode, linkedGrowId: u.linkedGrowId, bglBalance: u.bglBalance || 0 }));
+        const actionsToSend = pendingActions.splice(0);
+        const pushPayload = JSON.stringify({ users: publicUsers, pendingActions: actionsToSend });
 
         let response = null;
         try {
@@ -353,6 +376,7 @@ app.get('/api/auth/me', (req, res) => {
             username: user.username,
             uniqueCode: user.uniqueCode,
             linkedGrowId: user.linkedGrowId,
+            bglBalance: user.bglBalance || 0,
             createdAt: user.createdAt,
             liveStats: liveStats
         }
@@ -382,6 +406,49 @@ app.post('/api/auth/unlink', (req, res) => {
     pollGTPSCloud();
 
     return res.json({ success: true, message: 'Account unlinked successfully.' });
+});
+
+const ROLES_FOR_SALE = {
+    1: { name: 'VIP', price: 1 },
+    2: { name: 'Super VIP', price: 1 },
+    3: { name: 'Moderator', price: 1 },
+    4: { name: 'Admin', price: 1 },
+    5: { name: 'Community Manager', price: 1 }
+};
+
+app.post('/api/buy-role', (req, res) => {
+    const user = getAuthUser(req);
+    if (!user) return res.status(401).json({ success: false, error: 'Please log in first.' });
+    if (!user.linkedGrowId) return res.status(400).json({ success: false, error: 'You must link your in-game account first.' });
+
+    const roleId = parseInt(req.body && req.body.roleId);
+    const roleDef = ROLES_FOR_SALE[roleId];
+    if (!roleDef) return res.status(400).json({ success: false, error: 'Invalid role.' });
+
+    const bgl = user.bglBalance || 0;
+    if (bgl < roleDef.price) {
+        return res.status(400).json({ success: false, error: `Not enough BGL. You have ${bgl}, need ${roleDef.price}.` });
+    }
+
+    user.bglBalance = bgl - roleDef.price;
+    saveDatabase(db);
+
+    pendingActions.push({
+        type: 'grantRole',
+        growId: user.linkedGrowId,
+        roleId: roleId,
+        roleName: roleDef.name,
+        cost: roleDef.price
+    });
+
+    console.log(`[BUY-ROLE] ${user.username} (${user.linkedGrowId}) bought role ${roleDef.name} for ${roleDef.price} BGL. Remaining: ${user.bglBalance}`);
+
+    return res.json({
+        success: true,
+        message: `${roleDef.name} role purchased! It will be applied in-game within seconds.`,
+        newBalance: user.bglBalance,
+        roleName: roleDef.name
+    });
 });
 
 // Direct In-Game /link & /accept Verification Endpoint
@@ -1475,6 +1542,12 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
                     </div>
                     <button class="btn-danger" style="padding:6px 14px; font-size:12px;" onclick="handleUnlink()">UNLINK</button>
                 </div>
+                <div style="display:flex;align-items:center;gap:8px;background:rgba(212,175,55,0.1);border:1px solid var(--gold-border);border-radius:10px;padding:10px 14px;margin-bottom:12px;">
+                    <img src="/bgl-icon.webp" style="width:22px;height:22px;object-fit:contain;" alt="BGL">
+                    <span style="font-size:12px;color:var(--text-muted);font-weight:700;">BGL BALANCE:</span>
+                    <span id="accBglBalance" style="font-size:20px;font-weight:900;color:var(--gold-bright);">0</span>
+                    <span style="font-size:12px;color:var(--text-muted);">BGL</span>
+                </div>
                 <div class="char-stats-grid">
                     <div class="stat-badge">
                         <div class="lbl">STATUS</div>
@@ -1506,103 +1579,71 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
     <div class="portal-modal" id="shopModal">
         <div class="portal-box">
             <div class="portal-header">
-                <h3 id="shopModalTitle">VOID STORE • ROLES & RANKS</h3>
+                <h3 id="shopModalTitle">VOID STORE • ROLES &amp; RANKS</h3>
                 <button onclick="closeShopModal()" style="background:transparent; border:none; color:var(--gold-bright); font-size:26px; cursor:pointer;">&times;</button>
+            </div>
+
+            <div style="text-align:center; margin-bottom:20px;">
+                <div style="display:inline-flex; align-items:center; gap:10px; background:rgba(212,175,55,0.12); border:1px solid var(--gold-border); border-radius:12px; padding:12px 24px;">
+                    <img src="/bgl-icon.webp" style="width:28px;height:28px;object-fit:contain;" alt="BGL">
+                    <span style="font-size:13px;color:var(--text-muted);font-weight:700;">YOUR BALANCE:</span>
+                    <span id="shopBglBalance" style="font-size:22px;font-weight:900;color:var(--gold-bright);">0</span>
+                    <span style="font-size:14px;color:var(--text-muted);font-weight:700;">BGL</span>
+                </div>
+                <div style="font-size:11px;color:var(--text-muted);margin-top:8px;">Balance syncs from your in-game BGL (Item ID 7188)</div>
             </div>
 
             <div class="shop-grid">
                 <!-- VIP -->
                 <div class="shop-card">
                     <div>
-                        <span class="shop-card-badge">ROLE RANK (ID 1)</span>
-                        <h4>VIP MEMBER</h4>
-                        <div class="price">100 DL ($3)</div>
-                        <ul class="shop-perks-list">
-                            <li>[VIP] Gold Chat Tag & Glow</li>
-                            <li>+15% Extra Gems Drop Boost</li>
-                            <li>Access to /weather & VIP Worlds</li>
-                            <li>Buyable in-game via <b>/buyvip</b></li>
-                        </ul>
+                        <h4>VIP</h4>
+                        <div class="price" style="display:flex;align-items:center;justify-content:center;gap:6px;"><img src="/bgl-icon.webp" style="width:20px;height:20px;object-fit:contain;" alt="BGL"> 1 BGL</div>
                     </div>
-                    <button class="btn-buy" onclick="contactBuy('VIP Member')">PURCHASE VIP</button>
+                    <button class="btn-buy" onclick="buyRole(1, 'VIP')">PURCHASE VIP</button>
                 </div>
 
                 <!-- SUPER VIP -->
                 <div class="shop-card">
                     <div>
-                        <span class="shop-card-badge">ROLE RANK (ID 2)</span>
                         <h4>SUPER VIP</h4>
-                        <div class="price">250 DL ($6)</div>
-                        <ul class="shop-perks-list">
-                            <li>[SUPER VIP] Cyan Glow Title</li>
-                            <li>+30% Extra Gems on all actions</li>
-                            <li>Auto-collect & Auto-farm Speed</li>
-                            <li>Exclusive SVIP Lounge World</li>
-                        </ul>
+                        <div class="price" style="display:flex;align-items:center;justify-content:center;gap:6px;"><img src="/bgl-icon.webp" style="width:20px;height:20px;object-fit:contain;" alt="BGL"> 1 BGL</div>
                     </div>
-                    <button class="btn-buy" onclick="contactBuy('Super VIP')">PURCHASE SVIP</button>
+                    <button class="btn-buy" onclick="buyRole(2, 'Super VIP')">PURCHASE SVIP</button>
                 </div>
 
                 <!-- MODERATOR -->
                 <div class="shop-card" style="border-color: var(--gold-bright); box-shadow: 0 0 25px rgba(212,175,55,0.35);">
                     <div>
-                        <span class="shop-card-badge" style="background:var(--gold-primary); color:#000;">STAFF RANK (ID 3)</span>
                         <h4>MODERATOR</h4>
-                        <div class="price">500 DL ($12)</div>
-                        <ul class="shop-perks-list">
-                            <li>[MOD] Official Colored Title</li>
-                            <li>Full /pinfo & Security Inspector</li>
-                            <li>Mute, Curse, Warn & Kick Rights</li>
-                            <li>Priority Slot & Staff Lounge</li>
-                        </ul>
+                        <div class="price" style="display:flex;align-items:center;justify-content:center;gap:6px;"><img src="/bgl-icon.webp" style="width:20px;height:20px;object-fit:contain;" alt="BGL"> 1 BGL</div>
                     </div>
-                    <button class="btn-buy" style="background:linear-gradient(135deg, #f59e0b, #ffd700);" onclick="contactBuy('Moderator Rank')">PURCHASE MOD</button>
+                    <button class="btn-buy" style="background:linear-gradient(135deg, #f59e0b, #ffd700);" onclick="buyRole(3, 'Moderator')">PURCHASE MOD</button>
                 </div>
 
                 <!-- ADMIN -->
                 <div class="shop-card">
                     <div>
-                        <span class="shop-card-badge">STAFF RANK (ID 4)</span>
                         <h4>ADMINISTRATOR</h4>
-                        <div class="price">1,000 DL ($20)</div>
-                        <ul class="shop-perks-list">
-                            <li>[ADMIN] Red Master Title</li>
-                            <li>Global Server Broadcast access</li>
-                            <li>Ban, Pull, Unban & Curse controls</li>
-                            <li>Direct Developer contact line</li>
-                        </ul>
+                        <div class="price" style="display:flex;align-items:center;justify-content:center;gap:6px;"><img src="/bgl-icon.webp" style="width:20px;height:20px;object-fit:contain;" alt="BGL"> 1 BGL</div>
                     </div>
-                    <button class="btn-buy" onclick="contactBuy('Administrator')">PURCHASE ADMIN</button>
+                    <button class="btn-buy" onclick="buyRole(4, 'Admin')">PURCHASE ADMIN</button>
                 </div>
 
                 <!-- COMMUNITY MANAGER -->
                 <div class="shop-card">
                     <div>
-                        <span class="shop-card-badge">EXECUTIVE (ID 5)</span>
                         <h4>COMMUNITY MANAGER</h4>
-                        <div class="price">20 BGL ($35)</div>
-                        <ul class="shop-perks-list">
-                            <li>[CM] Purple Executive Title</li>
-                            <li>Host Official Events & Giveaways</li>
-                            <li>Custom Item Spawning rights</li>
-                            <li>Server Economy control channel</li>
-                        </ul>
+                        <div class="price" style="display:flex;align-items:center;justify-content:center;gap:6px;"><img src="/bgl-icon.webp" style="width:20px;height:20px;object-fit:contain;" alt="BGL"> 1 BGL</div>
                     </div>
-                    <button class="btn-buy" onclick="contactBuy('Community Manager')">PURCHASE CM</button>
+                    <button class="btn-buy" onclick="buyRole(5, 'Community Manager')">PURCHASE CM</button>
                 </div>
 
-                <!-- DEVELOPER / GOD -->
+                <!-- DEV / GOD -->
                 <div class="shop-card">
                     <div>
-                        <span class="shop-card-badge">ULTIMATE (ID 7 & 51)</span>
-                        <h4>DEV & GOD TIER</h4>
-                        <div class="price">CUSTOM ($50+)</div>
-                        <ul class="shop-perks-list">
-                            <li>[GOD] / [DEV] Custom Tag</li>
-                            <li>Custom Item & Set Design in server</li>
-                            <li>Full Command and System Access</li>
-                            <li>Lifetime VIP & Special Perks</li>
-                        </ul>
+                        <h4>DEV &amp; GOD TIER</h4>
+                        <div class="price">CONTACT OWNER</div>
                     </div>
                     <button class="btn-buy" onclick="contactBuy('Dev & God Tier')">CONTACT OWNER</button>
                 </div>
@@ -2026,6 +2067,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
 
             document.getElementById('accUsernameDisplay').innerText = currentUser.username;
             document.getElementById('accUniqueCode').innerText = currentUser.uniqueCode;
+            updateAccBalance();
 
             const linkedSec = document.getElementById('accLinkedSection');
             const unlinkedBox = document.getElementById('accUnlinkedCodeBox');
@@ -2266,12 +2308,47 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
         }
         applyTranslations();
 
-        function openShopModal() { document.getElementById('shopModal').style.display = 'flex'; }
+        function openShopModal() { document.getElementById('shopModal').style.display = 'flex'; updateShopBalance(); }
         function closeShopModal() { document.getElementById('shopModal').style.display = 'none'; }
 
         function contactBuy(item) {
             const userTag = (currentUser && currentUser.linkedGrowId) ? ' (Linked: ' + currentUser.linkedGrowId + ')' : '';
             showToast('To buy ' + item + userTag + ', please contact staff on Discord / WhatsApp!', 'success');
+        }
+
+        async function buyRole(roleId, roleName) {
+            if (!authToken) { showToast('Please log in first!', 'error'); return; }
+            if (!currentUser || !currentUser.linkedGrowId) { showToast('Link your in-game account first! Go to Account > link code.', 'error'); return; }
+            const bgl = currentUser.bglBalance || 0;
+            if (bgl < 1) { showToast('Not enough BGL! You need 1 BGL (Item ID 7188) in-game.', 'error'); return; }
+            try {
+                const res = await fetch('/api/buy-role', {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + authToken, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ roleId })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    currentUser.bglBalance = data.newBalance;
+                    updateShopBalance();
+                    updateAccBalance();
+                    showToast(roleName + ' purchased! Role will be applied in-game within seconds.', 'success');
+                } else {
+                    showToast(data.error || 'Purchase failed.', 'error');
+                }
+            } catch (e) {
+                showToast('Connection error. Try again.', 'error');
+            }
+        }
+
+        function updateShopBalance() {
+            const el = document.getElementById('shopBglBalance');
+            if (el && currentUser) el.innerText = (currentUser.bglBalance || 0).toLocaleString();
+        }
+
+        function updateAccBalance() {
+            const el = document.getElementById('accBglBalance');
+            if (el && currentUser) el.innerText = (currentUser.bglBalance || 0).toLocaleString();
         }
 
         function openTutorial(platform) {
