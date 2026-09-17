@@ -11,6 +11,7 @@ const GTPS_CLOUD_API = `https://api.gtps.cloud/g-api/${GTPS_PORT}/status`;
 
 app.use(cors());
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Database File Persistence with Sessions
@@ -32,9 +33,9 @@ function loadDatabase() {
     return { users: [], sessions: {} };
 }
 
-function saveDatabase(db) {
+function saveDatabase(database) {
     try {
-        fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2), 'utf8');
+        fs.writeFileSync(DB_FILE, JSON.stringify(database, null, 2), 'utf8');
     } catch (e) {
         console.error('Error saving database:', e);
     }
@@ -67,6 +68,32 @@ let serverData = {
     logs: []
 };
 
+function processPendingLinks(pendingList) {
+    if (!Array.isArray(pendingList) || pendingList.length === 0) return;
+
+    let modified = false;
+    for (const item of pendingList) {
+        if (!item || !item.code || !item.growId) continue;
+        const cleanCode = String(item.code).trim();
+        const cleanGrowId = String(item.growId).trim();
+
+        const user = db.users.find(u => String(u.uniqueCode).trim() === cleanCode);
+        if (user && user.linkedGrowId !== cleanGrowId) {
+            db.users.forEach(u => {
+                if (u.id !== user.id && (u.linkedGrowId || '').toLowerCase() === cleanGrowId.toLowerCase()) {
+                    u.linkedGrowId = null;
+                }
+            });
+            user.linkedGrowId = cleanGrowId;
+            modified = true;
+            console.log(`[SYNCED VIA GATEWAY] Linked GrowID "${cleanGrowId}" to website user "${user.username}" (Code: ${cleanCode})`);
+        }
+    }
+    if (modified) {
+        saveDatabase(db);
+    }
+}
+
 // Inbound push from GTPS Lua
 app.post('/api/sync', (req, res) => {
     const data = req.body || {};
@@ -78,6 +105,11 @@ app.post('/api/sync', (req, res) => {
         players: data.players || [],
         logs: data.logs || serverData.logs || []
     };
+
+    if (data.pendingLinks) {
+        processPendingLinks(data.pendingLinks);
+    }
+
     return res.json({ success: true });
 });
 
@@ -102,6 +134,10 @@ async function pollGTPSCloud() {
                     serverData.playerCount = data.playerCount || (data.players ? data.players.length : serverData.playerCount);
                     serverData.players = data.players || serverData.players;
                     serverData.logs = data.logs || serverData.logs;
+
+                    if (data.pendingLinks) {
+                        processPendingLinks(data.pendingLinks);
+                    }
                 } catch (e) {}
             }
         } else {
@@ -116,7 +152,7 @@ async function pollGTPSCloud() {
     }
 }
 
-setInterval(pollGTPSCloud, 2500);
+setInterval(pollGTPSCloud, 2000);
 pollGTPSCloud();
 
 app.get('/api/status', (req, res) => {
@@ -273,7 +309,7 @@ app.post('/api/auth/unlink', (req, res) => {
     return res.json({ success: true, message: 'Account unlinked successfully.' });
 });
 
-// In-Game /accept & /link Verification Endpoint
+// Direct In-Game /accept & /link Verification Endpoint
 app.post('/api/link-verify', (req, res) => {
     const { growId, code } = req.body || {};
 
@@ -290,7 +326,6 @@ app.post('/api/link-verify', (req, res) => {
         return res.status(404).json({ success: false, message: 'Invalid 4-digit code' });
     }
 
-    // Unlink any other user linked to this GrowID
     db.users.forEach(u => {
         if (u.id !== user.id && (u.linkedGrowId || '').toLowerCase() === cleanGrowId.toLowerCase()) {
             u.linkedGrowId = null;
@@ -300,7 +335,7 @@ app.post('/api/link-verify', (req, res) => {
     user.linkedGrowId = cleanGrowId;
     saveDatabase(db);
 
-    console.log(`[LINK SUCCESS] Linked GrowID "${cleanGrowId}" to website account "${user.username}" (Code: ${cleanCode})`);
+    console.log(`[DIRECT VERIFY] Linked GrowID "${cleanGrowId}" to website user "${user.username}" (Code: ${cleanCode})`);
 
     return res.json({
         success: true,
@@ -1888,7 +1923,6 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
                         renderAccountDashboard();
                     }
                 } else if (res.status === 401) {
-                    // Only remove if explicitly 401 Unauthorized
                     currentUser = null;
                     authToken = null;
                     localStorage.removeItem('voidps_token');
@@ -2257,11 +2291,11 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
             }
         }
 
-        setInterval(fetchServerStatus, 2500);
+        setInterval(fetchServerStatus, 2000);
         fetchServerStatus();
 
         fetchUserProfile();
-        setInterval(fetchUserProfile, 1500);
+        setInterval(fetchUserProfile, 1000);
     </script>
 </body>
 </html>`;
