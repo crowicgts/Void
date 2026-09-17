@@ -96,23 +96,33 @@ function processPendingLinks(pendingList) {
 }
 
 // Inbound push from GTPS Lua
-app.post('/api/sync', (req, res) => {
+app.all('/api/sync', (req, res) => {
+    console.log(`[DEBUG-RENDER] /api/sync hit with method: ${req.method}, query:`, req.query, 'body:', req.body);
     const data = req.body || {};
-    serverData = {
-        status: "ONLINE",
-        lastHeartbeat: Date.now(),
-        port: data.port || GTPS_PORT,
-        playerCount: data.playerCount || (data.players ? data.players.length : 0),
-        players: data.players || [],
-        logs: data.logs || serverData.logs || []
-    };
+    if (data.port || data.players || data.status) {
+        serverData = {
+            status: "ONLINE",
+            lastHeartbeat: Date.now(),
+            port: data.port || GTPS_PORT,
+            playerCount: data.playerCount || (data.players ? data.players.length : 0),
+            players: data.players || [],
+            logs: data.logs || serverData.logs || []
+        };
+    }
 
     if (data.pendingLinks) {
         processPendingLinks(data.pendingLinks);
     }
 
     const publicUsers = db.users.map(u => ({ username: u.username, code: u.uniqueCode, linkedGrowId: u.linkedGrowId }));
-    return res.json({ success: true, users: publicUsers });
+    return res.json({
+        success: true,
+        status: serverData.status,
+        playerCount: serverData.playerCount,
+        usersCount: publicUsers.length,
+        users: publicUsers,
+        serverData: serverData
+    });
 });
 
 // Periodic bidirectional polling to GTPS Cloud Gateway
@@ -133,7 +143,9 @@ async function pollGTPSCloud() {
                 signal: controller.signal
             });
         } catch (e) {
-            response = await fetch(GTPS_CLOUD_STATUS_API, { signal: controller.signal });
+            try {
+                response = await fetch(GTPS_CLOUD_STATUS_API, { signal: controller.signal });
+            } catch (err2) {}
         }
 
         clearTimeout(timeoutId);
@@ -151,10 +163,13 @@ async function pollGTPSCloud() {
                     serverData.players = data.players || serverData.players;
                     serverData.logs = data.logs || serverData.logs;
 
-                    if (data.pendingLinks) {
+                    if (data.pendingLinks && Array.isArray(data.pendingLinks) && data.pendingLinks.length > 0) {
+                        console.log(`[DEBUG-RENDER] Received ${data.pendingLinks.length} pending link(s) from GTPS Cloud:`, data.pendingLinks);
                         processPendingLinks(data.pendingLinks);
                     }
-                } catch (e) {}
+                } catch (e) {
+                    console.error('[DEBUG-RENDER] JSON Parse error from GTPS Cloud:', e.message);
+                }
             }
         } else {
             if (Date.now() - serverData.lastHeartbeat > 15000) {
@@ -170,6 +185,43 @@ async function pollGTPSCloud() {
 
 setInterval(pollGTPSCloud, 1800);
 pollGTPSCloud();
+
+app.all('/api/link-verify', (req, res) => {
+    console.log(`[DEBUG-RENDER] /api/link-verify hit with method: ${req.method}, query:`, req.query, 'body:', req.body);
+    const growId = (req.body && (req.body.growId || req.body.growid)) || req.query.growId || req.query.name;
+    const code = (req.body && (req.body.code || req.body.uniqueCode)) || req.query.code;
+
+    if (!growId || !code) {
+        return res.status(400).json({ success: false, message: 'Missing GrowID or code', debug: { receivedBody: req.body, receivedQuery: req.query } });
+    }
+
+    const cleanGrowId = String(growId).trim();
+    const cleanCode = String(code).trim();
+
+    const user = db.users.find(u => String(u.uniqueCode).trim() === cleanCode);
+
+    if (!user) {
+        return res.status(404).json({ success: false, message: `Invalid 4-digit code: ${cleanCode}` });
+    }
+
+    db.users.forEach(u => {
+        if (u.id !== user.id && (u.linkedGrowId || '').toLowerCase() === cleanGrowId.toLowerCase()) {
+            u.linkedGrowId = null;
+        }
+    });
+
+    user.linkedGrowId = cleanGrowId;
+    saveDatabase(db);
+
+    console.log(`[DIRECT VERIFY] Linked GrowID "${cleanGrowId}" to website user "${user.username}" (Code: ${cleanCode})`);
+
+    return res.json({
+        success: true,
+        username: user.username,
+        growId: user.linkedGrowId,
+        message: 'Account linked successfully!'
+    });
+});
 
 app.get('/api/status', (req, res) => {
     res.json(serverData);
