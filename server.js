@@ -186,6 +186,8 @@ async function pollGTPSCloud() {
                     serverData.players = Array.isArray(data.players) ? data.players : [];
                     serverData.logs = data.logs || serverData.logs;
 
+                    syncBGLFromPlayers(serverData.players);
+
                     if (data.pendingLinks && Array.isArray(data.pendingLinks) && data.pendingLinks.length > 0) {
                         console.log(`[DEBUG-RENDER] Received ${data.pendingLinks.length} pending link(s) from GTPS Cloud:`, data.pendingLinks);
                         processPendingLinks(data.pendingLinks);
