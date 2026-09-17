@@ -14,6 +14,16 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
+const BGL_ICON_B64 = "UklGRswEAABXRUJQVlA4WAoAAAAwAAAAHwAAHwAASUNDUMgBAAAAAAHIAAAAAAQwAABtbnRyUkdCIFhZWiAH4AABAAEAAAAAAABhY3NwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAA9tYAAQAAAADTLQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAlkZXNjAAAA8AAAACRyWFlaAAABFAAAABRnWFlaAAABKAAAABRiWFlaAAABPAAAABR3dHB0AAABUAAAABRyVFJDAAABZAAAAChnVFJDAAABZAAAAChiVFJDAAABZAAAAChjcHJ0AAABjAAAADxtbHVjAAAAAAAAAAEAAAAMZW5VUwAAAAgAAAAcAHMAUgBHAEJYWVogAAAAAAAAb6IAADj1AAADkFhZWiAAAAAAAABimQAAt4UAABjaWFlaIAAAAAAAACSgAAAPhAAAts9YWVogAAAAAAAA9tYAAQAAAADTLXBhcmEAAAAAAAQAAAACZmYAAPKnAAANWQAAE9AAAApbAAAAAAAAAABtbHVjAAAAAAAAAAEAAAAMZW5VUwAAACAAAAAcAEcAbwBvAGcAbABlACAASQBuAGMALgAgADIAMAAxADZBTFBITgAAAAEPMP8REYJRbFttXvoSCUhBGkhDChJYpt/04iCi/xMQoUrQZTCnHuxFEa7AzuBW8PzpZ3A92AwmQRehClAIpNVLs5N6K2UjpU6KlRQKAVZQOCCIAgAA8A4AnQEqIAAgAD5lKI9FpCKhG/1UAEAGRLYATplCPxvOeEM1iMO+o/EBhgP0l6gHnVdQBz5P7AfBN9x3tAXM3lRj3yKZ/iBlAsYn+j9Ij+++4D2g/SPsFfqh/t/VN6hT9axp+4r7J7/8PR8xUWrWxZ6uDdSRY5lz6rv+7WlaNgAA9x5/gy7/ljb34t/fk0qwLuLFe6DfN6TouNXRU4tXU/u4gcTPrVMi6q4KQ/lJGwvavnPd0P7Cu3Gx5kSnZUDC80Fq47f9AqWDYNupm2iJ/uUyi4lGOuc56f8jvqnob9PVRTHyXbEOLL+Zpsff/PFbK2arm66aIE/8TrOWS7d9c4UFo2PLjhjcoC29OP77Ov53JUJKpWCYIYbnGfYIVsgS1K5GyoGA0EP3AhxEZawkE4D08tZLoXBhafqG2qsG5kbarH0K5g/zMX1w5yzM/5gQ5dm71BVXW9niKN5IfwZIdkuc8ETMuaGSXZ3lndrBNOI7uk7LdjEyLqF2HFGwyqY3NJz2BvME61SLzIQLtRxJi6eXWhxIgUQ/uXVpfAr9/EMSyFRr/H+ag+pvJlJov7O8aJPxmYef9SpgprCvZztF++NfDrsDtf/ww+olb7/CZFrHwhpH8MJV4l//0AOaODZe8oL+PXxBe2hbvsvCZ+nfyGfNqs67WRga9UcoW50QWgZ3/H7//+DX+FuPd4pX+Yl/f6PUE7jbOvFh7je/T3/zIm2pH0/XUb98itQzjCz/EgaAnMsbz4Kcu+zAX/fc/dNnzyyPMd062bwWy2Oe1ii9htOp29YsFAxCvHyeY1oN9MTwizaT4qC0n1X+9N8/6l0yGMV6m938dKtCdNxNH9xw5ErQ8RaYAAAA";
+const BGL_ICON_BUFFER = Buffer.from(BGL_ICON_B64, 'base64');
+const BGL_ICON_SRC = "data:image/webp;base64," + BGL_ICON_B64;
+
+app.get('/bgl-icon.webp', (req, res) => {
+    res.setHeader('Content-Type', 'image/webp');
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    return res.end(BGL_ICON_BUFFER);
+});
+
 
 // Database File Persistence with Sessions
 const DB_FILE = path.join(__dirname, 'users.json');
@@ -373,18 +383,25 @@ app.get('/api/auth/me', (req, res) => {
                 user.bglBalance = liveBgl;
                 saveDatabase(db);
             }
+            const pRole = typeof p.role === 'number' ? p.role : (user.role || 0);
+            if (typeof p.role === 'number' && user.role !== p.role) {
+                user.role = p.role;
+                saveDatabase(db);
+            }
             liveStats = {
                 isOnline: true,
                 world: p.world || 'EXIT',
                 gems: p.gems || 0,
                 level: p.level || 1,
                 wl: p.wl || 0,
-                bgl: liveBgl
+                bgl: liveBgl,
+                role: pRole
             };
         } else {
             liveStats = {
                 isOnline: false,
-                bgl: liveBgl
+                bgl: liveBgl,
+                role: user.role || 0
             };
         }
     }
@@ -396,6 +413,7 @@ app.get('/api/auth/me', (req, res) => {
             uniqueCode: user.uniqueCode,
             linkedGrowId: user.linkedGrowId,
             bglBalance: liveBgl,
+            role: user.role || (liveStats ? liveStats.role : 0) || 0,
             createdAt: user.createdAt,
             liveStats: liveStats
         }
@@ -427,12 +445,24 @@ app.post('/api/auth/unlink', (req, res) => {
     return res.json({ success: true, message: 'Account unlinked successfully.' });
 });
 
+const ROLES_META = {
+    0: { id: 0, name: 'None', title: 'MEMBER', color: '#94a3b8', glow: 'rgba(148,163,184,0.4)', bg: 'rgba(148,163,184,0.08)' },
+    1: { id: 1, name: 'VIP', title: 'VIP', color: '#ffd700', glow: 'rgba(255,215,0,0.5)', bg: 'rgba(255,215,0,0.12)', price: 1 },
+    2: { id: 2, name: 'Super VIP', title: 'SUPER VIP', color: '#00f0ff', glow: 'rgba(0,240,255,0.5)', bg: 'rgba(0,240,255,0.12)', price: 1 },
+    3: { id: 3, name: 'Moderator', title: 'MODERATOR', color: '#22c55e', glow: 'rgba(34,197,94,0.5)', bg: 'rgba(34,197,94,0.12)', price: 1 },
+    4: { id: 4, name: 'Admin', title: 'ADMINISTRATOR', color: '#ef4444', glow: 'rgba(239,68,68,0.5)', bg: 'rgba(239,68,68,0.12)', price: 1 },
+    5: { id: 5, name: 'Community Manager', title: 'COMMUNITY MANAGER', color: '#a855f7', glow: 'rgba(168,85,247,0.5)', bg: 'rgba(168,85,247,0.12)', price: 1 },
+    6: { id: 6, name: 'Creator', title: 'CREATOR', color: '#f97316', glow: 'rgba(249,115,22,0.5)', bg: 'rgba(249,115,22,0.12)', contact: true },
+    7: { id: 7, name: 'God', title: 'GOD', color: '#ec4899', glow: 'rgba(236,72,153,0.5)', bg: 'rgba(236,72,153,0.12)', contact: true },
+    51: { id: 51, name: 'Developer', title: 'DEVELOPER', color: '#3b82f6', glow: 'rgba(59,130,246,0.5)', bg: 'rgba(59,130,246,0.12)', contact: true }
+};
+
 const ROLES_FOR_SALE = {
-    1: { name: 'VIP', price: 1 },
-    2: { name: 'Super VIP', price: 1 },
-    3: { name: 'Moderator', price: 1 },
-    4: { name: 'Admin', price: 1 },
-    5: { name: 'Community Manager', price: 1 }
+    1: ROLES_META[1],
+    2: ROLES_META[2],
+    3: ROLES_META[3],
+    4: ROLES_META[4],
+    5: ROLES_META[5]
 };
 
 app.post('/api/buy-role', (req, res) => {
@@ -444,12 +474,18 @@ app.post('/api/buy-role', (req, res) => {
     const roleDef = ROLES_FOR_SALE[roleId];
     if (!roleDef) return res.status(400).json({ success: false, error: 'Invalid role.' });
 
+    const currentRole = Number(user.role) || 0;
+    if (currentRole >= roleId) {
+        return res.status(400).json({ success: false, error: 'You already own this role or a higher role!' });
+    }
+
     const bgl = user.bglBalance || 0;
     if (bgl < roleDef.price) {
         return res.status(400).json({ success: false, error: `Not enough BGL. You have ${bgl}, need ${roleDef.price}.` });
     }
 
     user.bglBalance = bgl - roleDef.price;
+    user.role = roleId;
     saveDatabase(db);
 
     pendingActions.push({
@@ -460,12 +496,13 @@ app.post('/api/buy-role', (req, res) => {
         cost: roleDef.price
     });
 
-    console.log(`[BUY-ROLE] ${user.username} (${user.linkedGrowId}) bought role ${roleDef.name} for ${roleDef.price} BGL. Remaining: ${user.bglBalance}`);
+    console.log(`[BUY-ROLE] ${user.username} (${user.linkedGrowId}) bought role ${roleDef.name} for ${roleDef.price} BGL. New role: ${roleId}, Remaining: ${user.bglBalance}`);
 
     return res.json({
         success: true,
         message: `${roleDef.name} role purchased! It will be applied in-game within seconds.`,
         newBalance: user.bglBalance,
+        newRole: roleId,
         roleName: roleDef.name
     });
 });
@@ -1385,6 +1422,63 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
             .nav-socials { display: none; }
             .navbar { justify-content: flex-end; gap: 8px; }
         }
+    
+        /* Smooth scrolling */
+        html { scroll-behavior: smooth; }
+
+        /* Navigation Links */
+        .nav-links { display: flex; align-items: center; gap: 22px; }
+        .nav-link { color: var(--text-muted); font-size: 13px; font-weight: 800; text-decoration: none; letter-spacing: 1.2px; text-transform: uppercase; transition: all 0.2s ease; }
+        .nav-link:hover { color: var(--gold-bright); text-shadow: 0 0 12px var(--gold-glow); }
+        .nav-brand { cursor: pointer; display: flex; align-items: center; gap: 10px; text-decoration: none; }
+        @media (max-width: 960px) { .nav-links { display: none; } }
+
+        /* Content Sections */
+        .page-section { max-width: 1100px; margin: 70px auto 30px auto; padding: 0 24px; position: relative; z-index: 2; }
+        .section-header { text-align: center; margin-bottom: 36px; }
+        .section-tag { font-size: 11px; font-weight: 800; color: var(--gold-bright); letter-spacing: 2px; text-transform: uppercase; }
+        .section-title { font-size: 32px; font-weight: 900; color: #ffffff; margin-top: 6px; letter-spacing: 1px; }
+        .section-subtitle { color: var(--text-muted); max-width: 640px; margin: 10px auto 0 auto; line-height: 1.6; font-size: 14px; }
+
+        /* Feature Cards Grid (About) */
+        .features-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; }
+        .feature-card { background: rgba(18, 15, 11, 0.75); border: 1px solid var(--gold-border); border-radius: 14px; padding: 24px 20px; backdrop-filter: blur(10px); transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
+        .feature-card:hover { transform: translateY(-4px); border-color: var(--gold-bright); box-shadow: 0 12px 30px rgba(0,0,0,0.8), 0 0 20px rgba(212,175,55,0.25); }
+        .feature-icon { font-size: 32px; margin-bottom: 14px; }
+        .feature-card h3 { font-size: 16px; font-weight: 900; color: #ffffff; margin-bottom: 8px; letter-spacing: 0.5px; }
+        .feature-card p { font-size: 13px; color: var(--text-muted); line-height: 1.5; margin: 0; }
+
+        /* How to Play Steps Grid */
+        .how-steps-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
+        .step-card { background: rgba(18, 15, 11, 0.75); border: 1px solid var(--gold-border); border-radius: 14px; padding: 24px 20px; backdrop-filter: blur(10px); position: relative; }
+        .step-badge { display: inline-block; background: rgba(212,175,55,0.15); border: 1px solid var(--gold-bright); color: var(--gold-bright); font-size: 11px; font-weight: 900; padding: 4px 10px; border-radius: 6px; letter-spacing: 1px; margin-bottom: 14px; }
+        .step-card h4 { font-size: 18px; font-weight: 900; color: #ffffff; margin-bottom: 8px; }
+        .step-card p { font-size: 13px; color: var(--text-muted); line-height: 1.5; margin-bottom: 14px; }
+        .step-info-box { background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 8px 12px; font-family: monospace; font-size: 12px; color: var(--gold-bright); word-break: break-all; }
+
+        /* Community Cards Grid */
+        .community-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 24px; }
+        .community-card { background: rgba(18, 15, 11, 0.85); border: 1px solid var(--gold-border); border-radius: 16px; padding: 28px 24px; backdrop-filter: blur(10px); transition: all 0.3s ease; }
+        .community-card:hover { transform: translateY(-4px); box-shadow: 0 14px 35px rgba(0,0,0,0.9); }
+        .discord-card:hover { border-color: #5865F2; box-shadow: 0 14px 35px rgba(0,0,0,0.9), 0 0 25px rgba(88,101,242,0.3); }
+        .whatsapp-card:hover { border-color: #25D366; box-shadow: 0 14px 35px rgba(0,0,0,0.9), 0 0 25px rgba(37,211,102,0.3); }
+        .comm-icon-box { width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        .btn-comm { display: block; text-align: center; width: 100%; padding: 13px; border-radius: 10px; font-size: 13px; font-weight: 900; letter-spacing: 1px; text-decoration: none; transition: all 0.2s ease; }
+        .btn-comm:hover { filter: brightness(1.15); transform: scale(1.01); }
+
+        /* Role Shop Cards Custom Colors */
+        .shop-card.role-vip { border-color: rgba(255,215,0,0.6); box-shadow: 0 0 20px rgba(255,215,0,0.2); }
+        .shop-card.role-svip { border-color: rgba(0,240,255,0.6); box-shadow: 0 0 20px rgba(0,240,255,0.2); }
+        .shop-card.role-mod { border-color: rgba(34,197,94,0.6); box-shadow: 0 0 20px rgba(34,197,94,0.2); }
+        .shop-card.role-admin { border-color: rgba(239,68,68,0.6); box-shadow: 0 0 20px rgba(239,68,68,0.2); }
+        .shop-card.role-cm { border-color: rgba(168,85,247,0.6); box-shadow: 0 0 20px rgba(168,85,247,0.2); }
+        .shop-card.role-creator { border-color: rgba(249,115,22,0.6); box-shadow: 0 0 20px rgba(249,115,22,0.2); }
+        .shop-card.role-god { border-color: rgba(236,72,153,0.6); box-shadow: 0 0 20px rgba(236,72,153,0.2); }
+        .shop-card.role-dev { border-color: rgba(59,130,246,0.6); box-shadow: 0 0 20px rgba(59,130,246,0.2); }
+
+        /* Footer */
+        .site-footer { text-align: center; padding: 40px 20px 50px 20px; color: var(--text-muted); font-size: 13px; border-top: 1px solid rgba(212,175,55,0.15); margin-top: 60px; position: relative; z-index: 2; }
+
     </style>
 </head>
 <body>
@@ -1418,20 +1512,35 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
     </div>
 
     <!-- Navigation -->
-    <nav class="navbar">
-        <div class="nav-socials">
-            <a href="https://discord.gg" target="_blank" class="social-btn discord" title="Join Discord">
-                <svg viewBox="0 0 127.14 96.36">
-                    <path d="M107.7,8.07A105.15,105.15,0,0,0,81.47,0a72.06,72.06,0,0,0-3.36,6.83A97.68,97.68,0,0,0,49,6.83,72.37,72.37,0,0,0,45.64,0,105.89,105.89,0,0,0,19.39,8.09C2.79,32.65-1.71,56.6.54,80.21h0A105.73,105.73,0,0,0,32.71,96.36,77.7,77.7,0,0,0,39.6,85.25a68.42,68.42,0,0,1-10.85-5.18c.91-.66,1.8-1.34,2.66-2a75.57,75.57,0,0,0,64.32,0c.87.71,1.76,1.39,2.66,2a68.68,68.68,0,0,1-10.87,5.19,77,77,0,0,0,6.89,11.1A105.25,105.25,0,0,0,126.6,80.22h0C129.24,52.84,122.09,29.11,107.7,8.07ZM42.45,65.69C36.18,65.69,31,60,31,53s5-12.74,11.43-12.74S54,45.91,53.89,53,48.84,65.69,42.45,65.69Zm42.24,0C78.41,65.69,73.25,60,73.25,53s5-12.74,11.44-12.74S96.23,45.91,96.12,53,91.08,65.69,84.69,65.69Z"/>
-                </svg>
+    <nav class="navbar" id="top">
+        <div style="display:flex; align-items:center; gap:24px;">
+            <a href="#top" class="nav-brand">
+                <img src="/logo.png" alt="VOID" style="height:38px; filter:drop-shadow(0 0 10px var(--gold-glow));">
+                <span style="font-weight:900; letter-spacing:1.5px; color:#ffffff; font-size:16px;">VOID<span style="color:var(--gold-bright);">PS</span></span>
             </a>
-            <a href="https://whatsapp.com" target="_blank" class="social-btn whatsapp" title="WhatsApp Group">
-                <svg viewBox="0 0 448 512">
-                    <path d="M380.9 97.1C339 55.1 283.2 32 223.9 32c-122.4 0-222 99.6-222 222 0 39.1 10.2 77.3 29.6 111L0 480l117.7-30.9c32.4 17.7 68.9 27 106.1 27h.1c122.3 0 224.1-99.6 224.1-222 0-59.3-25.2-115-67.1-157zm-157 341.6c-33.2 0-65.7-8.9-94-25.7l-6.7-4-69.8 18.3L72 359.2l-4.4-7c-18.5-29.4-28.2-63.3-28.2-98.2 0-101.7 82.8-184.5 184.6-184.5 49.3 0 95.6 19.2 130.4 54.1 34.8 34.9 56.2 81.2 56.1 130.5 0 101.8-84.9 184.6-186.6 184.6zm101.2-138.2c-5.5-2.8-32.8-16.2-37.9-18-5.1-1.9-8.8-2.8-12.5 2.8-3.7 5.6-14.3 18-17.6 21.8-3.2 3.7-6.5 4.2-12 1.4-32.6-16.3-54-29.1-75.5-66-5.7-9.8 5.7-9.1 16.3-30.3 1.8-3.7.9-6.9-.5-9.7-1.4-2.8-12.5-30.1-17.1-41.2-4.5-10.8-9.1-9.3-12.5-9.5-3.2-.2-6.9-.2-10.6-.2-3.7 0-9.7 1.4-14.8 6.9-5.1 5.6-19.4 19-19.4 46.3 0 27.3 19.9 53.7 22.6 57.4 2.8 3.7 39.1 59.7 94.8 83.8 35.2 15.2 49 16.5 66.6 13.9 10.7-1.6 32.8-13.4 37.4-26.4 4.6-13 4.6-24.1 3.2-26.4-1.3-2.5-5-3.9-10.5-6.6z"/>
-                </svg>
-            </a>
+            <div class="nav-links">
+                <a href="#top" class="nav-link">HOME</a>
+                <a href="#aboutSection" class="nav-link">ABOUT</a>
+                <a href="#howToPlaySection" class="nav-link">HOW TO PLAY</a>
+                <a href="#communitySection" class="nav-link">COMMUNITY</a>
+                <a href="javascript:void(0)" onclick="openShopModal()" class="nav-link" style="color:var(--gold-bright);">STORE</a>
+            </div>
         </div>
-        <div class="nav-controls">
+
+        <div style="display:flex; align-items:center; gap:12px;">
+            <div class="nav-socials">
+                <a href="https://discord.gg/voidps" target="_blank" class="social-btn discord" title="Join Discord">
+                    <svg viewBox="0 0 127.14 96.36">
+                        <path d="M107.7,8.07A105.15,105.15,0,0,0,81.47,0a72.06,72.06,0,0,0-3.36,6.83A97.68,97.68,0,0,0,49,6.83,72.37,72.37,0,0,0,45.64,0,105.89,105.89,0,0,0,19.39,8.09C2.79,32.65-1.71,56.6.54,80.21h0A105.73,105.73,0,0,0,32.71,96.36,77.7,77.7,0,0,0,39.6,85.25a68.42,68.42,0,0,1-10.85-5.18c.91-.66,1.8-1.34,2.66-2a75.57,75.57,0,0,0,64.32,0c.87.71,1.76,1.39,2.66,2a68.68,68.68,0,0,1-10.87,5.19,77,77,0,0,0,6.89,11.1A105.25,105.25,0,0,0,126.6,80.22h0C129.24,52.84,122.09,29.11,107.7,8.07ZM42.45,65.69C36.18,65.69,31,60,31,53s5-12.74,11.43-12.74S54,45.91,53.89,53,48.84,65.69,42.45,65.69Zm42.24,0C78.41,65.69,73.25,60,73.25,53s5-12.74,11.44-12.74S96.23,45.91,96.12,53,91.08,65.69,84.69,65.69Z"/>
+                    </svg>
+                </a>
+                <a href="https://chat.whatsapp.com/invite/voidps" target="_blank" class="social-btn whatsapp" title="WhatsApp Group">
+                    <svg viewBox="0 0 448 512">
+                        <path d="M380.9 97.1C339 55.1 283.2 32 223.9 32c-122.4 0-222 99.6-222 222 0 39.1 10.2 77.3 29.6 111L0 480l117.7-30.9c32.4 17.7 68.9 27 106.1 27h.1c122.3 0 224.1-99.6 224.1-222 0-59.3-25.2-115-67.1-157zm-157 341.6c-33.2 0-65.7-8.9-94-25.7l-6.7-4-69.8 18.3L72 359.2l-4.4-7c-18.5-29.4-28.2-63.3-28.2-98.2 0-101.7 82.8-184.5 184.6-184.5 49.3 0 95.6 19.2 130.4 54.1 34.8 34.9 56.2 81.2 56.1 130.5 0 101.8-84.9 184.6-186.6 184.6zm101.2-138.2c-5.5-2.8-32.8-16.2-37.9-18-5.1-1.9-8.8-2.8-12.5 2.8-3.7 5.6-14.3 18-17.6 21.8-3.2 3.7-6.5 4.2-12 1.4-32.6-16.3-54-29.1-75.5-66-5.7-9.8 5.7-9.1 16.3-30.3 1.8-3.7.9-6.9-.5-9.7-1.4-2.8-12.5-30.1-17.1-41.2-4.5-10.8-9.1-9.3-12.5-9.5-3.2-.2-6.9-.2-10.6-.2-3.7 0-9.7 1.4-14.8 6.9-5.1 5.6-19.4 19-19.4 46.3 0 27.3 19.9 53.7 22.6 57.4 2.8 3.7 39.1 59.7 94.8 83.8 35.2 15.2 49 16.5 66.6 13.9 10.7-1.6 32.8-13.4 37.4-26.4 4.6-13 4.6-24.1 3.2-26.4-1.3-2.5-5-3.9-10.5-6.6z"/>
+                    </svg>
+                </a>
+            </div>
+            <div class="nav-controls">
             <button class="user-nav-btn" id="authNavBtn" onclick="handleAuthNavClick()">
                 <span id="authNavText">LOGIN / REGISTER</span>
             </button>
@@ -1451,11 +1560,14 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
         <p id="heroDesc">Connect to the fastest, zero-lag GTPS Cloud server. Join thousands of champions, conquer custom bosses, and trade in our rich economy.</p>
         
         <div class="hero-action-buttons">
-            <button class="btn-glow-gold" onclick="openTutorial('windows')">
+            <button class="btn-glow-gold" onclick="document.getElementById('howToPlaySection').scrollIntoView({behavior:'smooth'})">
                 <span id="btnHowToPlayText">HOW TO PLAY</span>
             </button>
             <button class="btn-glow-store" onclick="openShopModal()">
                 <span id="btnStoreText">SHOP ASSETS</span>
+            </button>
+            <button class="btn-glow-gold" style="background:rgba(88,101,242,0.15); border-color:#5865F2; color:#fff;" onclick="document.getElementById('communitySection').scrollIntoView({behavior:'smooth'})">
+                <span>COMMUNITY</span>
             </button>
         </div>
     </section>
@@ -1474,6 +1586,120 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
             <div class="val" id="playerCountVal" style="color:var(--gold-bright);">1</div>
         </div>
     </section>
+
+
+    <!-- ABOUT SECTION -->
+    <section class="page-section" id="aboutSection">
+        <div class="section-header">
+            <div class="section-tag">DISCOVER VOIDPS</div>
+            <h2 class="section-title">THE ULTIMATE GTPS EXPERIENCE</h2>
+            <p class="section-subtitle">Engineered on dedicated GTPS Cloud architecture with zero-lag network routing, pure player-driven economy, and full cross-platform connectivity.</p>
+        </div>
+        <div class="features-grid">
+            <div class="feature-card">
+                <div class="feature-icon" style="color:#3b82f6;">⚡</div>
+                <h3>ZERO-LAG CORE</h3>
+                <p>Hosted on high-speed GTPS Cloud infrastructure. Experience smooth block placement, zero rollback, and instant responsive actions.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon" style="color:#00f0ff;">💎</div>
+                <h3>REAL BGL ECONOMY</h3>
+                <p>Real Blue Gem Lock (Item 7188) balance system synced live between your in-game backpack and website dashboard.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon" style="color:#ffd700;">👑</div>
+                <h3>EXCLUSIVE ROLES</h3>
+                <p>Climb from VIP up to Developer tier. Unlock customized titles, unique chat tags, and privileged server capabilities.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon" style="color:#10b981;">🛡️</div>
+                <h3>SECURE &amp; FAIR</h3>
+                <p>Integrated security filters, active moderator surveillance, and unique link codes safeguard your identity and assets.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- HOW TO PLAY SECTION -->
+    <section class="page-section" id="howToPlaySection">
+        <div class="section-header">
+            <div class="section-tag">QUICK CONNECT</div>
+            <h2 class="section-title">HOW TO CONNECT &amp; PLAY</h2>
+            <p class="section-subtitle">Get connected in less than 2 minutes on Android, Windows, iOS, or macOS.</p>
+        </div>
+        <div class="how-steps-grid">
+            <div class="step-card">
+                <div class="step-badge">STEP 1</div>
+                <h4>CONFIGURE HOSTS</h4>
+                <p>Use PowerTunnel (Android), Surge 5 (iOS), or edit your hosts file (PC/Mac) with our cloud server routing.</p>
+                <div class="step-info-box">IP: 5.39.13.16 &bull; Port: 25741</div>
+            </div>
+            <div class="step-card">
+                <div class="step-badge">STEP 2</div>
+                <h4>START GROWTOPIA</h4>
+                <p>Launch Growtopia and click Play. You will be connected straight to VOIDPS with zero complicated downloads.</p>
+                <div class="step-info-box">URL: api.gtps.cloud/hosts/25741</div>
+            </div>
+            <div class="step-card">
+                <div class="step-badge">STEP 3</div>
+                <h4>LINK CHARACTER</h4>
+                <p>Register on this website, view your 4-digit code, and type <b>/link &lt;code&gt;</b> in-game to link your balance!</p>
+                <div class="step-info-box">In-game command: /link &lt;code&gt;</div>
+            </div>
+        </div>
+        <div style="text-align:center; margin-top:32px; display:flex; justify-content:center; gap:14px; flex-wrap:wrap;">
+            <button class="btn-glow-gold" onclick="openTutorial('windows')">WINDOWS TUTORIAL</button>
+            <button class="btn-glow-gold" onclick="openTutorial('android')">ANDROID TUTORIAL</button>
+            <button class="btn-glow-gold" onclick="openTutorial('ios')">IOS TUTORIAL</button>
+            <button class="btn-glow-gold" onclick="openTutorial('macos')">MAC TUTORIAL</button>
+        </div>
+    </section>
+
+    <!-- COMMUNITY SECTION -->
+    <section class="page-section" id="communitySection">
+        <div class="section-header">
+            <div class="section-tag">OFFICIAL HUBS</div>
+            <h2 class="section-title">JOIN OUR COMMUNITY</h2>
+            <p class="section-subtitle">Stay connected with players and staff. Participate in giveaways, report bugs, suggest features, and trade assets.</p>
+        </div>
+        <div class="community-grid">
+            <div class="community-card discord-card">
+                <div style="display:flex; align-items:center; gap:16px; margin-bottom:16px;">
+                    <div class="comm-icon-box" style="background:#5865F2;">
+                        <svg viewBox="0 0 127.14 96.36" style="width:28px; height:28px; fill:#fff;"><path d="M107.7,8.07A105.15,105.15,0,0,0,81.47,0a72.06,72.06,0,0,0-3.36,6.83A97.68,97.68,0,0,0,49,6.83,72.37,72.37,0,0,0,45.64,0,105.89,105.89,0,0,0,19.39,8.09C2.79,32.65-1.71,56.6.54,80.21h0A105.73,105.73,0,0,0,32.71,96.36,77.7,77.7,0,0,0,39.6,85.25a68.42,68.42,0,0,1-10.85-5.18c.91-.66,1.8-1.34,2.66-2a75.57,75.57,0,0,0,64.32,0c.87.71,1.76,1.39,2.66,2a68.68,68.68,0,0,1-10.87,5.19,77,77,0,0,0,6.89,11.1A105.25,105.25,0,0,0,126.6,80.22h0C129.24,52.84,122.09,29.11,107.7,8.07ZM42.45,65.69C36.18,65.69,31,60,31,53s5-12.74,11.43-12.74S54,45.91,53.89,53,48.84,65.69,42.45,65.69Zm42.24,0C78.41,65.69,73.25,60,73.25,53s5-12.74,11.44-12.74S96.23,45.91,96.12,53,91.08,65.69,84.69,65.69Z"/></svg>
+                    </div>
+                    <div>
+                        <h3 style="color:#ffffff; font-size:18px; font-weight:900; margin:0;">DISCORD SERVER</h3>
+                        <div style="font-size:12px; color:#5865F2; font-weight:700; margin-top:2px;">discord.gg/voidps</div>
+                    </div>
+                </div>
+                <p style="color:var(--text-muted); font-size:13px; line-height:1.5; margin-bottom:20px;">Daily giveaways, trade channels, server status announcements, and 24/7 staff ticket support.</p>
+                <a href="https://discord.gg/voidps" target="_blank" class="btn-comm" style="background:#5865F2; color:#ffffff;">JOIN OFFICIAL DISCORD</a>
+            </div>
+
+            <div class="community-card whatsapp-card">
+                <div style="display:flex; align-items:center; gap:16px; margin-bottom:16px;">
+                    <div class="comm-icon-box" style="background:#25D366;">
+                        <svg viewBox="0 0 448 512" style="width:26px; height:26px; fill:#fff;"><path d="M380.9 97.1C339 55.1 283.2 32 223.9 32c-122.4 0-222 99.6-222 222 0 39.1 10.2 77.3 29.6 111L0 480l117.7-30.9c32.4 17.7 68.9 27 106.1 27h.1c122.3 0 224.1-99.6 224.1-222 0-59.3-25.2-115-67.1-157zm-157 341.6c-33.2 0-65.7-8.9-94-25.7l-6.7-4-69.8 18.3L72 359.2l-4.4-7c-18.5-29.4-28.2-63.3-28.2-98.2 0-101.7 82.8-184.5 184.6-184.5 49.3 0 95.6 19.2 130.4 54.1 34.8 34.9 56.2 81.2 56.1 130.5 0 101.8-84.9 184.6-186.6 184.6zm101.2-138.2c-5.5-2.8-32.8-16.2-37.9-18-5.1-1.9-8.8-2.8-12.5 2.8-3.7 5.6-14.3 18-17.6 21.8-3.2 3.7-6.5 4.2-12 1.4-32.6-16.3-54-29.1-75.5-66-5.7-9.8 5.7-9.1 16.3-30.3 1.8-3.7.9-6.9-.5-9.7-1.4-2.8-12.5-30.1-17.1-41.2-4.5-10.8-9.1-9.3-12.5-9.5-3.2-.2-6.9-.2-10.6-.2-3.7 0-9.7 1.4-14.8 6.9-5.1 5.6-19.4 19-19.4 46.3 0 27.3 19.9 53.7 22.6 57.4 2.8 3.7 39.1 59.7 94.8 83.8 35.2 15.2 49 16.5 66.6 13.9 10.7-1.6 32.8-13.4 37.4-26.4 4.6-13 4.6-24.1 3.2-26.4-1.3-2.5-5-3.9-10.5-6.6z"/></svg>
+                    </div>
+                    <div>
+                        <h3 style="color:#ffffff; font-size:18px; font-weight:900; margin:0;">WHATSAPP GROUP</h3>
+                        <div style="font-size:12px; color:#25D366; font-weight:700; margin-top:2px;">chat.whatsapp.com/voidps</div>
+                    </div>
+                </div>
+                <p style="color:var(--text-muted); font-size:13px; line-height:1.5; margin-bottom:20px;">Instant server alerts, maintenance schedules, event notifications, and direct player chat.</p>
+                <a href="https://chat.whatsapp.com/invite/voidps" target="_blank" class="btn-comm" style="background:#25D366; color:#000000;">JOIN WHATSAPP COMMUNITY</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- SITE FOOTER -->
+    <footer class="site-footer">
+        <div style="display:flex; justify-content:center; align-items:center; gap:10px; margin-bottom:12px;">
+            <img src="/logo.png" alt="VOIDPS" style="height:26px;">
+            <span style="font-weight:900; color:#fff; letter-spacing:1px;">VOIDPS &bull; GTPS CLOUD</span>
+        </div>
+        <p style="margin:0; font-size:12px; color:var(--text-muted);">&copy; 2026 VOIDPS. All rights reserved. Not affiliated with Ubisoft or Growtopia.</p>
+    </footer>
 
     <!-- LOGIN / REGISTER MODAL -->
     <div class="portal-modal" id="loginModal">
@@ -1573,6 +1799,10 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
                         <div class="val" id="accLiveStatus">OFFLINE</div>
                     </div>
                     <div class="stat-badge">
+                        <div class="lbl">IN-GAME ROLE</div>
+                        <div class="val" id="accLiveRole" style="color:#94a3b8; font-weight:900;">MEMBER</div>
+                    </div>
+                    <div class="stat-badge">
                         <div class="lbl">WORLD</div>
                         <div class="val" id="accLiveWorld">--</div>
                     </div>
@@ -1617,58 +1847,86 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
             </div>
 
             <div class="shop-grid">
-                <!-- VIP -->
-                <div class="shop-card">
+                <!-- 1. VIP (#ffd700) -->
+                <div class="shop-card role-vip" style="border-color:#ffd700; box-shadow:0 0 20px rgba(255,215,0,0.25);">
                     <div>
-                        <h4>VIP</h4>
-                        <div class="price" style="display:flex;align-items:center;justify-content:center;gap:6px;"><img src="/bgl-icon.webp" style="width:20px;height:20px;object-fit:contain;" alt="BGL"> 1 BGL</div>
+                        <h4 style="color:#ffd700; text-shadow:0 0 12px rgba(255,215,0,0.5);">VIP</h4>
+                        <div class="price" style="display:flex;align-items:center;justify-content:center;gap:6px;">
+                            <img src="/bgl-icon.webp" style="width:20px;height:20px;object-fit:contain;" alt="BGL"> 1 BGL
+                        </div>
                     </div>
-                    <button class="btn-buy" onclick="buyRole(1, 'VIP')">PURCHASE VIP</button>
+                    <button class="btn-buy" id="btnRole1" onclick="buyRole(1, 'VIP')">PURCHASE VIP</button>
                 </div>
 
-                <!-- SUPER VIP -->
-                <div class="shop-card">
+                <!-- 2. SUPER VIP (#00f0ff) -->
+                <div class="shop-card role-svip" style="border-color:#00f0ff; box-shadow:0 0 20px rgba(0,240,255,0.25);">
                     <div>
-                        <h4>SUPER VIP</h4>
-                        <div class="price" style="display:flex;align-items:center;justify-content:center;gap:6px;"><img src="/bgl-icon.webp" style="width:20px;height:20px;object-fit:contain;" alt="BGL"> 1 BGL</div>
+                        <h4 style="color:#00f0ff; text-shadow:0 0 12px rgba(0,240,255,0.5);">SUPER VIP</h4>
+                        <div class="price" style="display:flex;align-items:center;justify-content:center;gap:6px;">
+                            <img src="/bgl-icon.webp" style="width:20px;height:20px;object-fit:contain;" alt="BGL"> 1 BGL
+                        </div>
                     </div>
-                    <button class="btn-buy" onclick="buyRole(2, 'Super VIP')">PURCHASE SVIP</button>
+                    <button class="btn-buy" id="btnRole2" style="background:linear-gradient(135deg, #0284c7, #00f0ff);" onclick="buyRole(2, 'Super VIP')">PURCHASE SVIP</button>
                 </div>
 
-                <!-- MODERATOR -->
-                <div class="shop-card" style="border-color: var(--gold-bright); box-shadow: 0 0 25px rgba(212,175,55,0.35);">
+                <!-- 3. MODERATOR (#22c55e) -->
+                <div class="shop-card role-mod" style="border-color:#22c55e; box-shadow:0 0 20px rgba(34,197,94,0.25);">
                     <div>
-                        <h4>MODERATOR</h4>
-                        <div class="price" style="display:flex;align-items:center;justify-content:center;gap:6px;"><img src="/bgl-icon.webp" style="width:20px;height:20px;object-fit:contain;" alt="BGL"> 1 BGL</div>
+                        <h4 style="color:#22c55e; text-shadow:0 0 12px rgba(34,197,94,0.5);">MODERATOR</h4>
+                        <div class="price" style="display:flex;align-items:center;justify-content:center;gap:6px;">
+                            <img src="/bgl-icon.webp" style="width:20px;height:20px;object-fit:contain;" alt="BGL"> 1 BGL
+                        </div>
                     </div>
-                    <button class="btn-buy" style="background:linear-gradient(135deg, #f59e0b, #ffd700);" onclick="buyRole(3, 'Moderator')">PURCHASE MOD</button>
+                    <button class="btn-buy" id="btnRole3" style="background:linear-gradient(135deg, #15803d, #22c55e);" onclick="buyRole(3, 'Moderator')">PURCHASE MOD</button>
                 </div>
 
-                <!-- ADMIN -->
-                <div class="shop-card">
+                <!-- 4. ADMINISTRATOR (#ef4444) -->
+                <div class="shop-card role-admin" style="border-color:#ef4444; box-shadow:0 0 20px rgba(239,68,68,0.25);">
                     <div>
-                        <h4>ADMINISTRATOR</h4>
-                        <div class="price" style="display:flex;align-items:center;justify-content:center;gap:6px;"><img src="/bgl-icon.webp" style="width:20px;height:20px;object-fit:contain;" alt="BGL"> 1 BGL</div>
+                        <h4 style="color:#ef4444; text-shadow:0 0 12px rgba(239,68,68,0.5);">ADMINISTRATOR</h4>
+                        <div class="price" style="display:flex;align-items:center;justify-content:center;gap:6px;">
+                            <img src="/bgl-icon.webp" style="width:20px;height:20px;object-fit:contain;" alt="BGL"> 1 BGL
+                        </div>
                     </div>
-                    <button class="btn-buy" onclick="buyRole(4, 'Admin')">PURCHASE ADMIN</button>
+                    <button class="btn-buy" id="btnRole4" style="background:linear-gradient(135deg, #b91c1c, #ef4444);" onclick="buyRole(4, 'Admin')">PURCHASE ADMIN</button>
                 </div>
 
-                <!-- COMMUNITY MANAGER -->
-                <div class="shop-card">
+                <!-- 5. COMMUNITY MANAGER (#a855f7) -->
+                <div class="shop-card role-cm" style="border-color:#a855f7; box-shadow:0 0 20px rgba(168,85,247,0.25);">
                     <div>
-                        <h4>COMMUNITY MANAGER</h4>
-                        <div class="price" style="display:flex;align-items:center;justify-content:center;gap:6px;"><img src="/bgl-icon.webp" style="width:20px;height:20px;object-fit:contain;" alt="BGL"> 1 BGL</div>
+                        <h4 style="color:#a855f7; text-shadow:0 0 12px rgba(168,85,247,0.5);">COMMUNITY MANAGER</h4>
+                        <div class="price" style="display:flex;align-items:center;justify-content:center;gap:6px;">
+                            <img src="/bgl-icon.webp" style="width:20px;height:20px;object-fit:contain;" alt="BGL"> 1 BGL
+                        </div>
                     </div>
-                    <button class="btn-buy" onclick="buyRole(5, 'Community Manager')">PURCHASE CM</button>
+                    <button class="btn-buy" id="btnRole5" style="background:linear-gradient(135deg, #7e22ce, #a855f7);" onclick="buyRole(5, 'Community Manager')">PURCHASE CM</button>
                 </div>
 
-                <!-- DEV / GOD -->
-                <div class="shop-card">
+                <!-- 6. CREATOR (#f97316) -->
+                <div class="shop-card role-creator" style="border-color:#f97316; box-shadow:0 0 20px rgba(249,115,22,0.25);">
                     <div>
-                        <h4>DEV &amp; GOD TIER</h4>
+                        <h4 style="color:#f97316; text-shadow:0 0 12px rgba(249,115,22,0.5);">CREATOR</h4>
                         <div class="price">CONTACT OWNER</div>
                     </div>
-                    <button class="btn-buy" onclick="contactBuy('Dev & God Tier')">CONTACT OWNER</button>
+                    <button class="btn-buy" id="btnRole6" style="background:linear-gradient(135deg, #c2410c, #f97316);" onclick="contactBuy('Creator Rank')">CONTACT OWNER</button>
+                </div>
+
+                <!-- 7. GOD (#ec4899) -->
+                <div class="shop-card role-god" style="border-color:#ec4899; box-shadow:0 0 20px rgba(236,72,153,0.25);">
+                    <div>
+                        <h4 style="color:#ec4899; text-shadow:0 0 12px rgba(236,72,153,0.5);">GOD</h4>
+                        <div class="price">CONTACT OWNER</div>
+                    </div>
+                    <button class="btn-buy" id="btnRole7" style="background:linear-gradient(135deg, #be185d, #ec4899);" onclick="contactBuy('God Tier')">CONTACT OWNER</button>
+                </div>
+
+                <!-- 51. DEVELOPER (#3b82f6) -->
+                <div class="shop-card role-dev" style="border-color:#3b82f6; box-shadow:0 0 20px rgba(59,130,246,0.25);">
+                    <div>
+                        <h4 style="color:#3b82f6; text-shadow:0 0 12px rgba(59,130,246,0.5);">DEVELOPER</h4>
+                        <div class="price">CONTACT OWNER</div>
+                    </div>
+                    <button class="btn-buy" id="btnRole51" style="background:linear-gradient(135deg, #1d4ed8, #3b82f6);" onclick="contactBuy('Developer Rank')">CONTACT OWNER</button>
                 </div>
             </div>
         </div>
@@ -2122,6 +2380,14 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
                         document.getElementById('accLiveBGL').innerText = bglVal.toLocaleString();
                     }
                 }
+                const currentRoleId = getEffectiveRole();
+                const roleMeta = CLIENT_ROLES_META[currentRoleId] || CLIENT_ROLES_META[0];
+                const roleEl = document.getElementById('accLiveRole');
+                if (roleEl) {
+                    roleEl.innerText = roleMeta.title;
+                    roleEl.style.color = roleMeta.color;
+                    roleEl.style.textShadow = '0 0 14px ' + roleMeta.glow;
+                }
                 updateAccBalance();
                 updateShopBalance();
             } else {
@@ -2363,8 +2629,13 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
                 const data = await res.json();
                 if (data.success) {
                     currentUser.bglBalance = data.newBalance;
+                    if (data.newRole !== undefined) {
+                        currentUser.role = data.newRole;
+                        if (currentUser.liveStats) currentUser.liveStats.role = data.newRole;
+                    }
                     updateShopBalance();
                     updateAccBalance();
+                    renderAccountDashboard();
                     showToast(roleName + ' purchased! Role will be applied in-game within seconds.', 'success');
                 } else {
                     showToast(data.error || 'Purchase failed.', 'error');
@@ -2374,6 +2645,18 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
             }
         }
 
+        const CLIENT_ROLES_META = {
+            0: { id: 0, name: 'None', title: 'MEMBER', color: '#94a3b8', glow: 'rgba(148,163,184,0.4)' },
+            1: { id: 1, name: 'VIP', title: 'VIP', color: '#ffd700', glow: 'rgba(255,215,0,0.5)' },
+            2: { id: 2, name: 'Super VIP', title: 'SUPER VIP', color: '#00f0ff', glow: 'rgba(0,240,255,0.5)' },
+            3: { id: 3, name: 'Moderator', title: 'MODERATOR', color: '#22c55e', glow: 'rgba(34,197,94,0.5)' },
+            4: { id: 4, name: 'Admin', title: 'ADMINISTRATOR', color: '#ef4444', glow: 'rgba(239,68,68,0.5)' },
+            5: { id: 5, name: 'Community Manager', title: 'COMMUNITY MANAGER', color: '#a855f7', glow: 'rgba(168,85,247,0.5)' },
+            6: { id: 6, name: 'Creator', title: 'CREATOR', color: '#f97316', glow: 'rgba(249,115,22,0.5)' },
+            7: { id: 7, name: 'God', title: 'GOD', color: '#ec4899', glow: 'rgba(236,72,153,0.5)' },
+            51: { id: 51, name: 'Developer', title: 'DEVELOPER', color: '#3b82f6', glow: 'rgba(59,130,246,0.5)' }
+        };
+
         function getEffectiveBGL() {
             if (!currentUser) return 0;
             if (currentUser.liveStats && typeof currentUser.liveStats.bgl === 'number') {
@@ -2382,14 +2665,64 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
             return currentUser.bglBalance || 0;
         }
 
+        function getEffectiveRole() {
+            if (!currentUser) return 0;
+            if (currentUser.liveStats && typeof currentUser.liveStats.role === 'number') {
+                return currentUser.liveStats.role;
+            }
+            return Number(currentUser.role) || 0;
+        }
+
         function updateShopBalance() {
             const el = document.getElementById('shopBglBalance');
             if (el && currentUser) el.innerText = getEffectiveBGL().toLocaleString();
+            updateShopRolesState();
         }
 
         function updateAccBalance() {
             const el = document.getElementById('accBglBalance');
             if (el && currentUser) el.innerText = getEffectiveBGL().toLocaleString();
+        }
+
+        function updateShopRolesState() {
+            const userRole = getEffectiveRole();
+            const rolesConfig = [
+                { id: 1, name: 'VIP', defaultText: 'PURCHASE VIP' },
+                { id: 2, name: 'Super VIP', defaultText: 'PURCHASE SVIP' },
+                { id: 3, name: 'Moderator', defaultText: 'PURCHASE MOD' },
+                { id: 4, name: 'Admin', defaultText: 'PURCHASE ADMIN' },
+                { id: 5, name: 'Community Manager', defaultText: 'PURCHASE CM' },
+                { id: 6, name: 'Creator', defaultText: 'CONTACT OWNER' },
+                { id: 7, name: 'God', defaultText: 'CONTACT OWNER' },
+                { id: 51, name: 'Developer', defaultText: 'CONTACT OWNER' }
+            ];
+
+            rolesConfig.forEach(r => {
+                const btn = document.getElementById('btnRole' + r.id);
+                if (!btn) return;
+                if (userRole === r.id) {
+                    btn.innerText = '✓ CURRENT ROLE';
+                    btn.disabled = true;
+                    btn.style.background = 'rgba(16, 185, 129, 0.25)';
+                    btn.style.borderColor = '#10b981';
+                    btn.style.color = '#10b981';
+                    btn.style.boxShadow = '0 0 14px rgba(16,185,129,0.3)';
+                    btn.style.cursor = 'default';
+                } else if (userRole > r.id && r.id <= 5) {
+                    btn.innerText = '✓ ALREADY OWNED';
+                    btn.disabled = true;
+                    btn.style.background = 'rgba(16, 185, 129, 0.15)';
+                    btn.style.borderColor = '#10b981';
+                    btn.style.color = '#10b981';
+                    btn.style.boxShadow = 'none';
+                    btn.style.cursor = 'default';
+                } else {
+                    btn.disabled = false;
+                    btn.innerText = r.defaultText;
+                    btn.style.cursor = 'pointer';
+                    btn.style.boxShadow = '';
+                }
+            });
         }
 
         function openTutorial(platform) {
