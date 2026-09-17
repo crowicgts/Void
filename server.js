@@ -71,17 +71,18 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg-black: #040105;
-            --bg-card: rgba(18, 2, 10, 0.92);
-            --bg-card-hover: rgba(30, 4, 18, 0.95);
-            --neon-red: #ff0044;
-            --neon-crimson: #e11d48;
-            --neon-glow: rgba(255, 0, 68, 0.5);
-            --red-border: rgba(255, 0, 68, 0.4);
+            --bg-black: #080706;
+            --bg-card: rgba(22, 18, 12, 0.92);
+            --bg-card-hover: rgba(36, 30, 18, 0.96);
+            --gold-primary: #d4af37;
+            --gold-bright: #fbbf24;
+            --gold-light: #fef08a;
+            --gold-glow: rgba(212, 175, 55, 0.45);
+            --gold-border: rgba(212, 175, 55, 0.4);
             --text-main: #ffffff;
-            --text-muted: #fca5a5;
-            --online-green: #00ff88;
-            --offline-red: #ff0044;
+            --text-muted: #d1c7b7;
+            --online-green: #10b981;
+            --offline-red: #ef4444;
             --discord-color: #5865f2;
             --whatsapp-color: #25d366;
         }
@@ -95,12 +96,12 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
             overflow-x: hidden;
             position: relative;
             background-image: 
-                radial-gradient(circle at 15% 15%, rgba(255, 0, 68, 0.18) 0%, transparent 45%),
-                radial-gradient(circle at 85% 15%, rgba(225, 29, 72, 0.18) 0%, transparent 45%),
-                radial-gradient(circle at 50% 85%, rgba(136, 19, 55, 0.25) 0%, transparent 55%);
+                radial-gradient(circle at 15% 15%, rgba(212, 175, 55, 0.15) 0%, transparent 45%),
+                radial-gradient(circle at 85% 15%, rgba(251, 191, 36, 0.12) 0%, transparent 45%),
+                radial-gradient(circle at 50% 85%, rgba(180, 130, 20, 0.2) 0%, transparent 55%);
         }
 
-        #lightning-canvas {
+        #gold-canvas {
             position: fixed;
             top: 0; left: 0; width: 100vw; height: 100vh;
             pointer-events: none;
@@ -116,9 +117,9 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
             align-items: center;
             padding: 0 44px;
             height: 76px;
-            background: rgba(8, 1, 5, 0.95);
-            border-bottom: 2px solid var(--red-border);
-            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.95), 0 0 25px rgba(255, 0, 68, 0.2);
+            background: rgba(12, 10, 8, 0.95);
+            border-bottom: 2px solid var(--gold-border);
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.95), 0 0 25px rgba(212, 175, 55, 0.2);
         }
 
         .nav-socials {
@@ -135,7 +136,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
             height: 42px;
             border-radius: 10px;
             background: rgba(255, 255, 255, 0.05);
-            border: 1px solid var(--red-border);
+            border: 1px solid var(--gold-border);
             color: #ffffff;
             text-decoration: none;
             transition: all 0.25s ease;
@@ -143,8 +144,8 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
 
         .social-btn:hover {
             transform: translateY(-2px);
-            border-color: var(--neon-red);
-            box-shadow: 0 0 18px var(--neon-glow);
+            border-color: var(--gold-bright);
+            box-shadow: 0 0 18px var(--gold-glow);
         }
 
         .social-btn.discord:hover { background: var(--discord-color); border-color: var(--discord-color); }
@@ -163,8 +164,8 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
         }
 
         .audio-toggle-btn {
-            background: rgba(255, 0, 68, 0.15);
-            border: 1px solid var(--red-border);
+            background: rgba(212, 175, 55, 0.15);
+            border: 1px solid var(--gold-border);
             color: #fff;
             padding: 9px 16px;
             border-radius: 8px;
@@ -178,13 +179,13 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
         }
 
         .audio-toggle-btn:hover {
-            background: rgba(255, 0, 68, 0.35);
-            box-shadow: 0 0 15px var(--neon-glow);
+            background: rgba(212, 175, 55, 0.35);
+            box-shadow: 0 0 15px var(--gold-glow);
         }
 
         .lang-switch-btn {
-            background: rgba(255, 0, 68, 0.15);
-            border: 1px solid var(--red-border);
+            background: rgba(212, 175, 55, 0.15);
+            border: 1px solid var(--gold-border);
             color: #fff;
             padding: 9px 18px;
             border-radius: 8px;
@@ -198,8 +199,8 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
         }
 
         .lang-switch-btn:hover {
-            background: rgba(255, 0, 68, 0.35);
-            box-shadow: 0 0 20px var(--neon-glow);
+            background: rgba(212, 175, 55, 0.35);
+            box-shadow: 0 0 20px var(--gold-glow);
             transform: translateY(-2px);
         }
 
@@ -225,13 +226,13 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
             width: 85%;
             height: auto;
             margin-bottom: 24px;
-            filter: drop-shadow(0 0 35px rgba(255, 0, 68, 0.65));
+            filter: drop-shadow(0 0 35px rgba(212, 175, 55, 0.7));
             animation: floatLogo 3.5s ease-in-out infinite alternate;
         }
 
         @keyframes floatLogo {
-            0% { transform: translateY(0); filter: drop-shadow(0 0 30px rgba(255, 0, 68, 0.5)); }
-            100% { transform: translateY(-8px); filter: drop-shadow(0 0 55px rgba(255, 0, 68, 0.9)); }
+            0% { transform: translateY(0); filter: drop-shadow(0 0 30px rgba(212, 175, 55, 0.5)); }
+            100% { transform: translateY(-8px); filter: drop-shadow(0 0 55px rgba(251, 191, 36, 0.9)); }
         }
 
         .hero p {
@@ -253,27 +254,27 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
             margin-bottom: 40px;
         }
 
-        .btn-glow-red {
+        .btn-glow-gold {
             font-size: 15px;
             font-weight: 900;
             letter-spacing: 1px;
             text-transform: uppercase;
-            background: linear-gradient(135deg, #e11d48, #ff0044);
-            border: 2px solid #ff4d6d;
-            color: #ffffff;
+            background: linear-gradient(135deg, #b45309, #d4af37, #fbbf24);
+            border: 2px solid var(--gold-bright);
+            color: #000000;
             padding: 16px 38px;
             border-radius: 10px;
             cursor: pointer;
-            box-shadow: 0 0 30px rgba(255, 0, 68, 0.7);
+            box-shadow: 0 0 30px rgba(212, 175, 55, 0.7);
             transition: all 0.3s ease;
             display: flex;
             align-items: center;
             gap: 10px;
         }
 
-        .btn-glow-red:hover {
+        .btn-glow-gold:hover {
             transform: translateY(-3px) scale(1.03);
-            box-shadow: 0 0 45px rgba(255, 0, 68, 1);
+            box-shadow: 0 0 45px rgba(251, 191, 36, 1);
             filter: brightness(1.15);
         }
 
@@ -282,9 +283,9 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
             font-weight: 900;
             letter-spacing: 1px;
             text-transform: uppercase;
-            background: rgba(20, 3, 10, 0.85);
-            border: 2px solid var(--red-border);
-            color: #ff99aa;
+            background: rgba(22, 18, 12, 0.9);
+            border: 2px solid var(--gold-border);
+            color: var(--gold-bright);
             padding: 16px 38px;
             border-radius: 10px;
             cursor: pointer;
@@ -296,10 +297,10 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
         }
 
         .btn-glow-store:hover {
-            background: rgba(45, 6, 22, 0.95);
-            border-color: var(--neon-red);
+            background: rgba(36, 30, 18, 0.95);
+            border-color: var(--gold-bright);
             color: #fff;
-            box-shadow: 0 0 30px var(--neon-glow);
+            box-shadow: 0 0 30px var(--gold-glow);
             transform: translateY(-3px);
         }
 
@@ -319,7 +320,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
 
         .status-card {
             background: var(--bg-card);
-            border: 1px solid var(--red-border);
+            border: 1px solid var(--gold-border);
             padding: 26px;
             border-radius: 14px;
             box-shadow: 0 10px 35px rgba(0, 0, 0, 0.75);
@@ -329,8 +330,8 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
         }
 
         .status-card:hover {
-            border-color: var(--neon-red);
-            box-shadow: 0 0 30px var(--neon-glow);
+            border-color: var(--gold-bright);
+            box-shadow: 0 0 30px var(--gold-glow);
             transform: translateY(-3px);
         }
 
@@ -338,7 +339,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
             font-size: 13px;
             text-transform: uppercase;
             letter-spacing: 2px;
-            color: var(--text-muted);
+            color: var(--gold-bright);
             margin-bottom: 8px;
             font-weight: 800;
         }
@@ -353,8 +354,8 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
             gap: 12px;
         }
 
-        /* Tutorial Modal */
-        .tutorial-modal {
+        /* Modal Structure */
+        .portal-modal {
             position: fixed;
             top: 0; left: 0; width: 100vw; height: 100vh;
             background: rgba(0, 0, 0, 0.92);
@@ -366,15 +367,15 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
             padding: 20px;
         }
 
-        .tutorial-box {
-            background: #080105;
-            border: 2px solid var(--neon-red);
+        .portal-box {
+            background: #0f0d0a;
+            border: 2px solid var(--gold-primary);
             border-radius: 18px;
-            width: 840px;
+            width: 880px;
             max-width: 100%;
             max-height: 90vh;
             overflow-y: auto;
-            box-shadow: 0 0 60px rgba(255, 0, 68, 0.65);
+            box-shadow: 0 0 60px rgba(212, 175, 55, 0.55);
             padding: 34px;
             animation: popIn 0.25s ease;
         }
@@ -384,19 +385,19 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
             to { transform: scale(1); opacity: 1; }
         }
 
-        .tutorial-header {
+        .portal-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
             margin-bottom: 24px;
             padding-bottom: 16px;
-            border-bottom: 1px solid var(--red-border);
+            border-bottom: 1px solid var(--gold-border);
         }
 
-        .tutorial-header h3 {
+        .portal-header h3 {
             font-size: 22px;
             font-weight: 900;
-            color: #ff4d6d;
+            color: var(--gold-bright);
             letter-spacing: 1px;
         }
 
@@ -408,8 +409,8 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
         }
 
         .plat-btn {
-            background: rgba(20, 3, 10, 0.85);
-            border: 1px solid var(--red-border);
+            background: rgba(22, 18, 12, 0.85);
+            border: 1px solid var(--gold-border);
             color: var(--text-muted);
             padding: 10px 22px;
             border-radius: 8px;
@@ -424,19 +425,114 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
 
         .plat-btn:hover {
             color: white;
-            border-color: var(--neon-red);
+            border-color: var(--gold-bright);
         }
 
         .plat-btn.active {
-            background: linear-gradient(135deg, #e11d48, #ff0044);
-            border-color: #ff4d6d;
-            color: white;
-            box-shadow: 0 0 25px var(--neon-glow);
+            background: linear-gradient(135deg, #b45309, #d4af37);
+            border-color: var(--gold-bright);
+            color: #000000;
+            box-shadow: 0 0 25px var(--gold-glow);
         }
 
+        /* Shop Grid */
+        .shop-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 20px;
+        }
+
+        .shop-card {
+            background: rgba(24, 20, 14, 0.85);
+            border: 1px solid var(--gold-border);
+            border-radius: 12px;
+            padding: 22px;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            transition: all 0.25s ease;
+        }
+
+        .shop-card:hover {
+            border-color: var(--gold-bright);
+            transform: translateY(-4px);
+            box-shadow: 0 8px 30px var(--gold-glow);
+            background: rgba(36, 30, 20, 0.95);
+        }
+
+        .shop-card-badge {
+            background: rgba(212, 175, 55, 0.2);
+            color: var(--gold-light);
+            border: 1px solid var(--gold-primary);
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 800;
+            display: inline-block;
+            margin-bottom: 12px;
+            text-transform: uppercase;
+        }
+
+        .shop-card h4 {
+            font-size: 20px;
+            font-weight: 900;
+            color: #ffffff;
+            margin-bottom: 8px;
+        }
+
+        .shop-card .price {
+            font-size: 22px;
+            font-weight: 900;
+            color: var(--gold-bright);
+            margin-bottom: 14px;
+        }
+
+        .shop-perks-list {
+            text-align: left;
+            font-size: 13px;
+            color: var(--text-muted);
+            line-height: 1.6;
+            margin-bottom: 20px;
+            list-style: none;
+        }
+
+        .shop-perks-list li {
+            position: relative;
+            padding-left: 16px;
+            margin-bottom: 6px;
+        }
+
+        .shop-perks-list li::before {
+            content: "•";
+            position: absolute;
+            left: 0;
+            color: var(--gold-bright);
+            font-weight: bold;
+        }
+
+        .btn-buy {
+            background: linear-gradient(135deg, #d4af37, #fbbf24);
+            border: 1px solid #fde047;
+            color: #000000;
+            padding: 12px;
+            border-radius: 8px;
+            font-weight: 900;
+            font-size: 14px;
+            cursor: pointer;
+            width: 100%;
+            transition: all 0.2s ease;
+        }
+
+        .btn-buy:hover {
+            box-shadow: 0 0 20px var(--gold-glow);
+            filter: brightness(1.1);
+        }
+
+        /* Step Card */
         .guide-container {
-            background: #0f0209;
-            border: 1px solid var(--red-border);
+            background: #14100b;
+            border: 1px solid var(--gold-border);
             border-radius: 14px;
             padding: 26px;
             display: flex;
@@ -453,8 +549,8 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
             width: 36px;
             height: 36px;
             border-radius: 50%;
-            background: rgba(255, 0, 68, 0.25);
-            border: 2px solid var(--neon-red);
+            background: rgba(212, 175, 55, 0.25);
+            border: 2px solid var(--gold-primary);
             color: #ffffff;
             display: flex;
             align-items: center;
@@ -462,7 +558,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
             font-weight: 900;
             font-size: 16px;
             flex-shrink: 0;
-            box-shadow: 0 0 12px var(--neon-glow);
+            box-shadow: 0 0 12px var(--gold-glow);
         }
 
         .step-content h4 {
@@ -480,11 +576,11 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
         }
 
         .code-snippet {
-            background: #000000;
-            border: 1px solid #3d0517;
+            background: #050403;
+            border: 1px solid #382c16;
             padding: 10px 14px;
             border-radius: 6px;
-            color: #38bdf8;
+            color: var(--gold-bright);
             font-family: 'Courier New', monospace;
             font-size: 13px;
             margin-top: 8px;
@@ -492,9 +588,9 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
         }
 
         .guide-btn {
-            background: rgba(255, 0, 68, 0.2);
-            border: 1px solid var(--neon-red);
-            color: #fff;
+            background: rgba(212, 175, 55, 0.2);
+            border: 1px solid var(--gold-primary);
+            color: var(--gold-light);
             padding: 9px 18px;
             border-radius: 6px;
             font-weight: 800;
@@ -508,13 +604,14 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
         }
 
         .guide-btn:hover {
-            background: var(--neon-red);
-            box-shadow: 0 0 15px var(--neon-glow);
+            background: var(--gold-primary);
+            color: #000;
+            box-shadow: 0 0 15px var(--gold-glow);
         }
 
         .apk-card {
-            background: rgba(255, 0, 68, 0.08);
-            border: 1px dashed var(--neon-red);
+            background: rgba(212, 175, 55, 0.08);
+            border: 1px dashed var(--gold-primary);
             border-radius: 12px;
             padding: 18px;
             margin-bottom: 22px;
@@ -533,21 +630,21 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
         }
 
         .lang-box {
-            background: #0d0107;
-            border: 2px solid var(--neon-red);
+            background: #110e0a;
+            border: 2px solid var(--gold-primary);
             border-radius: 20px;
             padding: 40px;
             text-align: center;
             max-width: 480px;
             width: 90%;
-            box-shadow: 0 0 70px rgba(255, 0, 68, 0.75);
+            box-shadow: 0 0 70px rgba(212, 175, 55, 0.6);
             animation: popIn 0.3s ease;
         }
 
         .lang-box h3 {
             font-size: 24px;
             font-weight: 900;
-            color: #ffffff;
+            color: var(--gold-bright);
             margin-bottom: 6px;
             letter-spacing: 1px;
         }
@@ -560,8 +657,8 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
 
         .lang-choice-btn {
             flex: 1;
-            background: rgba(22, 3, 12, 0.9);
-            border: 2px solid var(--red-border);
+            background: rgba(26, 22, 16, 0.9);
+            border: 2px solid var(--gold-border);
             padding: 22px 16px;
             border-radius: 14px;
             color: white;
@@ -576,9 +673,9 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
         }
 
         .lang-choice-btn:hover {
-            border-color: var(--neon-red);
-            background: rgba(255, 0, 68, 0.25);
-            box-shadow: 0 0 35px var(--neon-glow);
+            border-color: var(--gold-bright);
+            background: rgba(212, 175, 55, 0.25);
+            box-shadow: 0 0 35px var(--gold-glow);
             transform: translateY(-4px);
         }
 
@@ -592,7 +689,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
     </style>
 </head>
 <body>
-    <canvas id="lightning-canvas"></canvas>
+    <canvas id="gold-canvas"></canvas>
 
     <!-- Background Audio Loop -->
     <audio id="bgAudio" loop preload="auto">
@@ -602,7 +699,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
     <!-- Language Selector Modal -->
     <div class="lang-modal" id="langModal">
         <div class="lang-box">
-            <img src="/logo.png" alt="VOID" style="max-width: 170px; margin-bottom: 14px; filter: drop-shadow(0 0 20px var(--neon-red));">
+            <img src="/logo.png" alt="VOID" style="max-width: 170px; margin-bottom: 14px; filter: drop-shadow(0 0 20px var(--gold-glow));">
             <h3>SELECT LANGUAGE</h3>
             <p style="color: var(--text-muted); font-size: 14px; font-weight: 600;">PILIH BAHASA ANDA UNTUK MELANJUTKAN</p>
             <div class="lang-options">
@@ -643,16 +740,16 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
         </div>
     </nav>
 
-    <!-- Hero Section (Center 3D VOID Logo) -->
+    <!-- Hero Section -->
     <section class="hero">
         <img src="/logo.png" alt="VOID Private Server" class="main-logo-img">
         <p id="heroDesc">Connect to the fastest, zero-lag GTPS Cloud server. Join thousands of champions, conquer custom bosses, and trade in our rich economy.</p>
         
         <div class="hero-action-buttons">
-            <button class="btn-glow-red" onclick="openTutorial('windows')">
+            <button class="btn-glow-gold" onclick="openTutorial('windows')">
                 <span id="btnHowToPlayText">HOW TO PLAY</span>
             </button>
-            <button class="btn-glow-store" onclick="alert('Store coming soon!')">
+            <button class="btn-glow-store" onclick="openShopModal()">
                 <span id="btnStoreText">SHOP ASSETS</span>
             </button>
         </div>
@@ -669,16 +766,75 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
         </div>
         <div class="status-card">
             <h4 id="lblOnlinePlayers">ONLINE PLAYERS</h4>
-            <div class="val" id="playerCountVal" style="color:#ff4d6d;">0</div>
+            <div class="val" id="playerCountVal" style="color:var(--gold-bright);">0</div>
         </div>
     </section>
 
-    <!-- Tutorial Modal -->
-    <div class="tutorial-modal" id="tutorialModal">
-        <div class="tutorial-box">
-            <div class="tutorial-header">
+    <!-- SHOP MODAL -->
+    <div class="portal-modal" id="shopModal">
+        <div class="portal-box" style="width: 960px;">
+            <div class="portal-header">
+                <h3 id="shopModalTitle">VOID STORE & ROLES CATALOG</h3>
+                <button onclick="closeShopModal()" style="background:transparent; border:none; color:var(--gold-bright); font-size:26px; cursor:pointer;">&times;</button>
+            </div>
+
+            <div class="shop-grid">
+                <!-- VIP Role -->
+                <div class="shop-card">
+                    <div>
+                        <span class="shop-card-badge">ROLE RANK</span>
+                        <h4>VIP MEMBER</h4>
+                        <div class="price">$5.00</div>
+                        <ul class="shop-perks-list" id="vipPerks">
+                            <li>Exclusive [VIP] Chat Badge & Gold Name</li>
+                            <li>+15% Extra Gems on all activities</li>
+                            <li>Access to /weather and VIP Worlds</li>
+                            <li>Auto-farm speed multiplier</li>
+                        </ul>
+                    </div>
+                    <button class="btn-buy" onclick="contactBuy('VIP Member')">BUY VIP ROLE</button>
+                </div>
+
+                <!-- MODERATOR Role -->
+                <div class="shop-card" style="border-color: var(--gold-bright); box-shadow: 0 0 25px rgba(212,175,55,0.3);">
+                    <div>
+                        <span class="shop-card-badge" style="background: var(--gold-primary); color:#000;">STAFF RANK</span>
+                        <h4>MODERATOR</h4>
+                        <div class="price">$15.00</div>
+                        <ul class="shop-perks-list" id="modPerks">
+                            <li>[MOD] Colored In-Game Title</li>
+                            <li>Full /pinfo & Player Inspection Access</li>
+                            <li>Mute, Curse, Warn & Kick Privileges</li>
+                            <li>Priority Server Slot & Staff Lounge</li>
+                        </ul>
+                    </div>
+                    <button class="btn-buy" style="background: linear-gradient(135deg, #f59e0b, #ffd700);" onclick="contactBuy('Moderator Rank')">BUY MOD ROLE</button>
+                </div>
+
+                <!-- BGL Pack -->
+                <div class="shop-card">
+                    <div>
+                        <span class="shop-card-badge">CURRENCY</span>
+                        <h4>100x BGL PACK</h4>
+                        <div class="price">$10.00</div>
+                        <ul class="shop-perks-list" id="bglPerks">
+                            <li>100 Blue Gem Locks (ID 7188)</li>
+                            <li>Direct Delivery to your Inventory</li>
+                            <li>Safe Transaction & Instant Credit</li>
+                        </ul>
+                    </div>
+                    <button class="btn-buy" onclick="contactBuy('100x BGL Pack')">BUY BGL PACK</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- TUTORIAL MODAL -->
+    <div class="portal-modal" id="tutorialModal">
+        <div class="portal-box">
+            <div class="portal-header">
                 <h3 id="tutorialModalTitle">HOW TO PLAY ON VOIDPS</h3>
-                <button onclick="closeTutorial()" style="background:transparent; border:none; color:var(--text-muted); font-size:26px; cursor:pointer;">&times;</button>
+                <button onclick="closeTutorial()" style="background:transparent; border:none; color:var(--gold-bright); font-size:26px; cursor:pointer;">&times;</button>
             </div>
 
             <div class="platform-tabs">
@@ -727,9 +883,9 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
             <!-- ANDROID GUIDE -->
             <div id="guide-android" class="guide-content" style="display:none;">
                 <div class="apk-card">
-                    <h5 style="color:#ff4d6d; font-size:13px; font-weight:800; letter-spacing:1px; margin-bottom:4px;" id="apkOptional">OPTIONAL • Quick Setup with APK</h5>
+                    <h5 style="color:var(--gold-bright); font-size:13px; font-weight:800; letter-spacing:1px; margin-bottom:4px;" id="apkOptional">OPTIONAL • Quick Setup with APK</h5>
                     <p style="font-size:13px; color:var(--text-muted); margin-bottom:12px;" id="apkDesc">Want to play without doing any other steps? Download .apk file and install it and you're ready to play! (Connects you directly to GTPS Cloud).</p>
-                    <button class="guide-btn" style="background:var(--neon-red);" onclick="alert('Downloading APK...')"><span id="btnDownloadApk">Download GTPS Cloud APK</span></button>
+                    <button class="guide-btn" style="background:var(--gold-primary); color:#000;" onclick="alert('Downloading APK...')"><span id="btnDownloadApk">Download GTPS Cloud APK</span></button>
                 </div>
                 <div class="guide-container">
                     <div class="step-item">
@@ -876,6 +1032,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
                 lblStatus: 'SERVER STATUS',
                 lblOnline: 'ONLINE PLAYERS',
                 modalTitle: 'HOW TO PLAY ON VOIDPS',
+                shopTitle: 'VOID STORE & ROLES CATALOG',
                 winStep1T: 'Run Notepad as Administrator',
                 winStep1D: 'Right-click Notepad and choose "Run as Administrator".',
                 winStep2T: 'Open hosts file',
@@ -919,10 +1076,11 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
                 langText: 'INDONESIA',
                 heroDesc: 'Terhubung ke server GTPS Cloud tercepat dan tanpa lag. Bergabunglah dengan ribuan pemain, kalahkan custom boss, dan nikmati ekonomi server kami.',
                 btnHowToPlay: 'CARA BERMAIN',
-                btnStore: 'BELI ITEM',
+                btnStore: 'BELI ITEM & ROLE',
                 lblStatus: 'STATUS SERVER',
                 lblOnline: 'PEMAIN ONLINE',
                 modalTitle: 'CARA BERMAIN DI VOIDPS',
+                shopTitle: 'TOKO VOIDPS & KATALOG ROLE',
                 winStep1T: 'Buka Notepad sebagai Administrator',
                 winStep1D: 'Klik kanan Notepad lalu pilih "Run as Administrator".',
                 winStep2T: 'Buka file hosts',
@@ -985,6 +1143,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
             document.getElementById('lblServerStatus').innerText = t.lblStatus;
             document.getElementById('lblOnlinePlayers').innerText = t.lblOnline;
             document.getElementById('tutorialModalTitle').innerText = t.modalTitle;
+            document.getElementById('shopModalTitle').innerText = t.shopTitle;
 
             document.getElementById('winStep1Title').innerText = t.winStep1T;
             document.getElementById('winStep1Desc').innerText = t.winStep1D;
@@ -1033,6 +1192,18 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
         }
         applyTranslations();
 
+        function openShopModal() {
+            document.getElementById('shopModal').style.display = 'flex';
+        }
+
+        function closeShopModal() {
+            document.getElementById('shopModal').style.display = 'none';
+        }
+
+        function contactBuy(item) {
+            alert('To purchase ' + item + ', please join our Discord or message our WhatsApp staff!');
+        }
+
         function openTutorial(platform) {
             document.getElementById('tutorialModal').style.display = 'flex';
             switchPlatform(platform || 'windows');
@@ -1055,8 +1226,8 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
             alert('Copied to clipboard!');
         }
 
-        /* Red Particle Animation */
-        const canvas = document.getElementById('lightning-canvas');
+        /* Gold Particle Animation */
+        const canvas = document.getElementById('gold-canvas');
         const ctx = canvas.getContext('2d');
         let particles = [];
 
@@ -1071,10 +1242,10 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
             constructor() {
                 this.x = Math.random() * canvas.width;
                 this.y = Math.random() * canvas.height;
-                this.size = Math.random() * 3 + 1;
-                this.speedX = (Math.random() - 0.5) * 1.2;
-                this.speedY = -Math.random() * 1.5 - 0.5;
-                this.color = Math.random() > 0.4 ? 'rgba(255, 0, 68, 0.6)' : 'rgba(225, 29, 72, 0.4)';
+                this.size = Math.random() * 2.5 + 1;
+                this.speedX = (Math.random() - 0.5) * 0.9;
+                this.speedY = -Math.random() * 1.2 - 0.3;
+                this.color = Math.random() > 0.4 ? 'rgba(212, 175, 55, 0.6)' : 'rgba(251, 191, 36, 0.4)';
             }
             update() {
                 this.x += this.speedX;
@@ -1091,7 +1262,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
             }
         }
 
-        for (let i = 0; i < 70; i++) particles.push(new Particle());
+        for (let i = 0; i < 65; i++) particles.push(new Particle());
 
         function animateCanvas() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -1139,5 +1310,5 @@ app.get('/', (req, res) => {
 });
 
 app.listen(PORT, () => {
-    console.log(`VOIDPS Portal running on port ${PORT}`);
+    console.log(`VOIDPS Luxury Gold Portal running on port ${PORT}`);
 });
