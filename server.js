@@ -104,10 +104,12 @@ function syncBGLFromPlayers(players) {
         if (!p || !p.name) continue;
         const linked = db.users.find(u => u.linkedGrowId && u.linkedGrowId.toLowerCase() === p.name.toLowerCase());
         if (linked) {
-            const newBgl = typeof p.bgl === 'number' ? p.bgl : (linked.bglBalance || 0);
+            const newBgl = Number(p.bgl) || 0;
+            console.log(`[BGL-SYNC] ${p.name} bgl=${p.bgl} → parsed=${newBgl}, current=${linked.bglBalance}`);
             if (linked.bglBalance !== newBgl) {
                 linked.bglBalance = newBgl;
                 modified = true;
+                console.log(`[BGL-SYNC] Updated ${linked.username} balance to ${newBgl}`);
             }
         }
     }
