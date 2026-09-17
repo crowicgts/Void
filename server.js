@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -12,19 +13,56 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Database File Persistence
+const DB_FILE = path.join(__dirname, 'users.json');
+
+function loadDatabase() {
+    try {
+        if (fs.existsSync(DB_FILE)) {
+            const raw = fs.readFileSync(DB_FILE, 'utf8');
+            return JSON.parse(raw);
+        }
+    } catch (e) {
+        console.error('Error reading database:', e);
+    }
+    return { users: [] };
+}
+
+function saveDatabase(db) {
+    try {
+        fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2), 'utf8');
+    } catch (e) {
+        console.error('Error saving database:', e);
+    }
+}
+
+let db = loadDatabase();
+const sessions = {}; // token -> userId
+
+function hashPassword(pwd) {
+    return crypto.createHash('sha256').update(String(pwd)).digest('hex');
+}
+
+function generateUniqueCode() {
+    let code;
+    let exists = true;
+    while (exists) {
+        code = Math.floor(100000 + Math.random() * 900000).toString();
+        exists = db.users.some(u => u.uniqueCode === code);
+    }
+    return code;
+}
+
 let serverData = {
-    status: "OFFLINE",
-    lastHeartbeat: 0,
+    status: "ONLINE",
+    lastHeartbeat: Date.now(),
     port: GTPS_PORT,
-    playerCount: 0,
+    playerCount: 1,
     players: [],
     logs: []
 };
 
-let pendingLinks = {};
-let verifiedSessions = {};
-
-// Direct inbound push from GTPS Lua
+// Inbound push from GTPS Lua
 app.post('/api/sync', (req, res) => {
     const data = req.body || {};
     serverData = {
@@ -35,35 +73,39 @@ app.post('/api/sync', (req, res) => {
         players: data.players || [],
         logs: data.logs || serverData.logs || []
     };
-    return res.json({ success: true, pendingLinks: Object.values(pendingLinks).filter(p => p.status === 'PENDING') });
+    return res.json({ success: true });
 });
 
-// Periodic fallback polling from GTPS Cloud Gateway
+// Periodic polling from GTPS Cloud Gateway
 async function pollGTPSCloud() {
     try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 3500);
+        const timeoutId = setTimeout(() => controller.abort(), 4000);
 
         const response = await fetch(GTPS_CLOUD_API, { signal: controller.signal });
         clearTimeout(timeoutId);
 
         if (response.ok) {
-            const data = await response.json();
-            serverData = {
-                status: "ONLINE",
-                lastHeartbeat: Date.now(),
-                port: data.port || GTPS_PORT,
-                playerCount: data.playerCount || (data.players ? data.players.length : 0),
-                players: data.players || [],
-                logs: data.logs || serverData.logs || []
-            };
+            serverData.status = "ONLINE";
+            serverData.lastHeartbeat = Date.now();
+
+            const text = await response.text();
+            if (text && text.trim().startsWith('{')) {
+                try {
+                    const data = JSON.parse(text);
+                    serverData.port = data.port || GTPS_PORT;
+                    serverData.playerCount = data.playerCount || (data.players ? data.players.length : serverData.playerCount);
+                    serverData.players = data.players || serverData.players;
+                    serverData.logs = data.logs || serverData.logs;
+                } catch (e) {}
+            }
         } else {
-            if (Date.now() - serverData.lastHeartbeat > 8000) {
+            if (Date.now() - serverData.lastHeartbeat > 15000) {
                 serverData.status = "OFFLINE";
             }
         }
     } catch (err) {
-        if (Date.now() - serverData.lastHeartbeat > 8000) {
+        if (Date.now() - serverData.lastHeartbeat > 15000) {
             serverData.status = "OFFLINE";
         }
     }
@@ -76,68 +118,182 @@ app.get('/api/status', (req, res) => {
     res.json(serverData);
 });
 
-// Web Account Link Request
-app.post('/api/link-request', (req, res) => {
-    const { growId } = req.body;
-    if (!growId || growId.trim() === '') {
-        return res.status(400).json({ error: 'Please enter a valid in-game name' });
+// Authentication Middleware
+function getAuthUser(req) {
+    const authHeader = req.headers['authorization'] || '';
+    const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+    if (!token || !sessions[token]) return null;
+    const userId = sessions[token];
+    return db.users.find(u => u.id === userId) || null;
+}
+
+// User Registration
+app.post('/api/auth/register', (req, res) => {
+    const { username, password } = req.body || {};
+
+    if (!username || typeof username !== 'string' || username.trim().length < 4) {
+        return res.status(400).json({ success: false, error: 'Username must be at least 4 characters.' });
     }
 
-    const cleanName = growId.trim();
-    const code = Math.floor(1000 + Math.random() * 9000).toString();
-    const requestId = 'REQ-' + Date.now();
+    const cleanUsername = username.trim();
+    if (!/^[a-zA-Z0-9_-]+$/.test(cleanUsername)) {
+        return res.status(400).json({ success: false, error: 'Username contains invalid characters. Use letters, numbers, _ or -.' });
+    }
 
-    pendingLinks[requestId] = {
-        id: requestId,
-        growId: cleanName,
-        code: code,
-        status: 'PENDING',
+    if (!password || typeof password !== 'string' || password.length < 6) {
+        return res.status(400).json({ success: false, error: 'Password must be at least 6 characters.' });
+    }
+
+    const existing = db.users.find(u => u.username.toLowerCase() === cleanUsername.toLowerCase());
+    if (existing) {
+        return res.status(400).json({ success: false, error: 'Username is already registered.' });
+    }
+
+    const newUser = {
+        id: 'usr_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+        username: cleanUsername,
+        passwordHash: hashPassword(password),
+        uniqueCode: generateUniqueCode(),
+        linkedGrowId: null,
         createdAt: Date.now()
     };
 
-    return res.json({ success: true, requestId, code, growId: cleanName });
+    db.users.push(newUser);
+    saveDatabase(db);
+
+    const token = crypto.randomBytes(24).toString('hex');
+    sessions[token] = newUser.id;
+
+    return res.json({
+        success: true,
+        token: token,
+        user: {
+            username: newUser.username,
+            uniqueCode: newUser.uniqueCode,
+            linkedGrowId: newUser.linkedGrowId,
+            createdAt: newUser.createdAt
+        }
+    });
 });
 
-// Check if in-game accepted the link
-app.get('/api/link-status/:requestId', (req, res) => {
-    const { requestId } = req.params;
-    const item = pendingLinks[requestId];
-    if (!item) {
-        return res.json({ status: 'EXPIRED' });
+// User Login
+app.post('/api/auth/login', (req, res) => {
+    const { username, password } = req.body || {};
+
+    if (!username || !password) {
+        return res.status(400).json({ success: false, error: 'Please provide username and password.' });
     }
-    return res.json({ status: item.status, growId: item.growId });
+
+    const cleanUsername = String(username).trim();
+    const user = db.users.find(u => u.username.toLowerCase() === cleanUsername.toLowerCase());
+
+    if (!user || user.passwordHash !== hashPassword(password)) {
+        return res.status(401).json({ success: false, error: 'Invalid username or password.' });
+    }
+
+    const token = crypto.randomBytes(24).toString('hex');
+    sessions[token] = user.id;
+
+    return res.json({
+        success: true,
+        token: token,
+        user: {
+            username: user.username,
+            uniqueCode: user.uniqueCode,
+            linkedGrowId: user.linkedGrowId,
+            createdAt: user.createdAt
+        }
+    });
 });
 
-// Endpoint called by in-game Lua to verify
+// Current User Profile & Live Stats
+app.get('/api/auth/me', (req, res) => {
+    const user = getAuthUser(req);
+    if (!user) {
+        return res.status(401).json({ success: false, error: 'Unauthorized' });
+    }
+
+    let liveStats = null;
+    if (user.linkedGrowId && serverData.players && Array.isArray(serverData.players)) {
+        const p = serverData.players.find(x => (x.name || '').toLowerCase() === user.linkedGrowId.toLowerCase());
+        if (p) {
+            liveStats = {
+                isOnline: true,
+                world: p.world || 'EXIT',
+                gems: p.gems || 0,
+                level: p.level || 1,
+                wl: p.wl || 0
+            };
+        } else {
+            liveStats = {
+                isOnline: false
+            };
+        }
+    }
+
+    return res.json({
+        success: true,
+        user: {
+            username: user.username,
+            uniqueCode: user.uniqueCode,
+            linkedGrowId: user.linkedGrowId,
+            createdAt: user.createdAt,
+            liveStats: liveStats
+        }
+    });
+});
+
+// User Logout
+app.post('/api/auth/logout', (req, res) => {
+    const authHeader = req.headers['authorization'] || '';
+    const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+    if (token && sessions[token]) {
+        delete sessions[token];
+    }
+    return res.json({ success: true });
+});
+
+// Unlink Account
+app.post('/api/auth/unlink', (req, res) => {
+    const user = getAuthUser(req);
+    if (!user) {
+        return res.status(401).json({ success: false, error: 'Unauthorized' });
+    }
+
+    user.linkedGrowId = null;
+    saveDatabase(db);
+
+    return res.json({ success: true, message: 'Account unlinked successfully.' });
+});
+
+// In-Game /accept Verification Endpoint (Called by GTPS Lua)
 app.post('/api/link-verify', (req, res) => {
-    const { requestId, code, action } = req.body;
-    const item = pendingLinks[requestId];
-    if (!item) {
-        return res.status(404).json({ error: 'Request not found' });
+    const { growId, code } = req.body || {};
+
+    if (!growId || !code) {
+        return res.status(400).json({ success: false, message: 'Missing GrowID or link code.' });
     }
 
-    if (action === 'ACCEPT' && item.code === code) {
-        item.status = 'VERIFIED';
-        verifiedSessions[item.growId] = {
-            growId: item.growId,
-            verifiedAt: Date.now()
-        };
-        return res.json({ success: true, message: 'Account verified successfully!' });
-    } else {
-        item.status = 'REJECTED';
-        return res.json({ success: true, message: 'Request rejected' });
-    }
-});
+    const cleanGrowId = String(growId).trim();
+    const cleanCode = String(code).trim();
 
-// Public pending list for in-game Lua /accept
-app.get('/api/pending-links/:growId', (req, res) => {
-    const targetName = req.params.growId.toLowerCase();
-    const matches = Object.values(pendingLinks).filter(p => 
-        p.status === 'PENDING' && 
-        p.growId.toLowerCase() === targetName &&
-        (Date.now() - p.createdAt < 300000)
-    );
-    return res.json({ requests: matches });
+    const user = db.users.find(u => u.uniqueCode === cleanCode);
+
+    if (!user) {
+        return res.status(404).json({ success: false, message: 'Invalid or expired unique link code.' });
+    }
+
+    user.linkedGrowId = cleanGrowId;
+    saveDatabase(db);
+
+    console.log(`[Account Linked] GrowID "${cleanGrowId}" successfully linked to Website User "${user.username}" (Code: ${cleanCode})`);
+
+    return res.json({
+        success: true,
+        username: user.username,
+        growId: user.linkedGrowId,
+        message: 'Account linked successfully!'
+    });
 });
 
 app.get('/logo.png', (req, res) => {
@@ -153,7 +309,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VOID Private Server</title>
+    <title>VOID Private Server • Official Portal</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -499,6 +655,159 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
             letter-spacing: 1px;
         }
 
+        /* Auth Forms */
+        .auth-tabs {
+            display: flex;
+            border-bottom: 2px solid var(--gold-border);
+            margin-bottom: 22px;
+            gap: 10px;
+        }
+
+        .auth-tab-btn {
+            flex: 1;
+            background: transparent;
+            border: none;
+            padding: 12px;
+            color: var(--text-muted);
+            font-weight: 800;
+            font-size: 15px;
+            cursor: pointer;
+            border-bottom: 3px solid transparent;
+            transition: all 0.2s ease;
+        }
+
+        .auth-tab-btn.active {
+            color: var(--gold-bright);
+            border-bottom-color: var(--gold-bright);
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+            text-align: left;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--gold-light);
+            margin-bottom: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .form-helper {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+
+        .auth-input {
+            width: 100%;
+            background: #050403;
+            border: 1px solid var(--gold-border);
+            padding: 14px 16px;
+            border-radius: 8px;
+            color: #ffffff;
+            font-size: 15px;
+            font-weight: 600;
+            outline: none;
+            transition: all 0.2s ease;
+        }
+
+        .auth-input:focus {
+            border-color: var(--gold-bright);
+            box-shadow: 0 0 15px var(--gold-glow);
+        }
+
+        .alert-box {
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            font-size: 13px;
+            font-weight: 700;
+            display: none;
+        }
+
+        .alert-error {
+            background: rgba(239, 68, 68, 0.15);
+            border: 1px solid rgba(239, 68, 68, 0.5);
+            color: #fca5a5;
+        }
+
+        .alert-success {
+            background: rgba(16, 185, 129, 0.15);
+            border: 1px solid rgba(16, 185, 129, 0.5);
+            color: #6ee7b7;
+        }
+
+        /* Account Details Box */
+        .account-hero-box {
+            background: rgba(26, 22, 14, 0.9);
+            border: 1px solid var(--gold-border);
+            border-radius: 14px;
+            padding: 24px;
+            margin-bottom: 24px;
+            text-align: center;
+        }
+
+        .unique-code-box {
+            background: #060504;
+            border: 2px dashed var(--gold-bright);
+            border-radius: 12px;
+            padding: 18px;
+            margin: 16px 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+
+        .code-number {
+            font-size: 34px;
+            font-weight: 900;
+            letter-spacing: 6px;
+            color: var(--gold-bright);
+            text-shadow: 0 0 25px var(--gold-glow);
+        }
+
+        .btn-copy-code {
+            background: rgba(212, 175, 55, 0.25);
+            border: 1px solid var(--gold-primary);
+            color: var(--gold-light);
+            padding: 8px 18px;
+            border-radius: 6px;
+            font-weight: 800;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .btn-copy-code:hover {
+            background: var(--gold-primary);
+            color: #000;
+            box-shadow: 0 0 15px var(--gold-glow);
+        }
+
+        .char-stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 12px;
+            margin-top: 16px;
+        }
+
+        .stat-badge {
+            background: #0d0a06;
+            border: 1px solid #382c16;
+            padding: 12px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .stat-badge .lbl { font-size: 11px; text-transform: uppercase; color: var(--gold-bright); font-weight: 800; }
+        .stat-badge .val { font-size: 16px; font-weight: 900; color: #fff; margin-top: 4px; }
+
         /* Shop Grid */
         .shop-grid {
             display: grid;
@@ -538,19 +847,8 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
             text-transform: uppercase;
         }
 
-        .shop-card h4 {
-            font-size: 19px;
-            font-weight: 900;
-            color: #ffffff;
-            margin-bottom: 6px;
-        }
-
-        .shop-card .price {
-            font-size: 22px;
-            font-weight: 900;
-            color: var(--gold-bright);
-            margin-bottom: 14px;
-        }
+        .shop-card h4 { font-size: 19px; font-weight: 900; color: #ffffff; margin-bottom: 6px; }
+        .shop-card .price { font-size: 22px; font-weight: 900; color: var(--gold-bright); margin-bottom: 14px; }
 
         .shop-perks-list {
             text-align: left;
@@ -588,47 +886,23 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
             transition: all 0.2s ease;
         }
 
-        .btn-buy:hover {
-            box-shadow: 0 0 20px var(--gold-glow);
-            filter: brightness(1.1);
-        }
+        .btn-buy:hover { box-shadow: 0 0 20px var(--gold-glow); filter: brightness(1.1); }
 
-        /* In-Game Sync Dialog */
-        .auth-input {
-            width: 100%;
-            background: #050403;
-            border: 1px solid var(--gold-border);
-            padding: 14px;
+        .btn-danger {
+            background: rgba(239, 68, 68, 0.15);
+            border: 1px solid rgba(239, 68, 68, 0.5);
+            color: #fca5a5;
+            padding: 10px 18px;
             border-radius: 8px;
-            color: #ffffff;
-            font-size: 16px;
-            font-weight: 700;
-            margin-bottom: 14px;
-            outline: none;
+            font-weight: 800;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s ease;
         }
 
-        .auth-input:focus {
-            border-color: var(--gold-bright);
-            box-shadow: 0 0 15px var(--gold-glow);
-        }
-
-        .sync-step-box {
-            background: rgba(212, 175, 55, 0.08);
-            border: 1px dashed var(--gold-primary);
-            border-radius: 10px;
-            padding: 18px;
-            margin: 16px 0;
-            text-align: left;
-        }
-
-        .code-display {
-            font-size: 32px;
-            font-weight: 900;
-            letter-spacing: 4px;
-            color: var(--gold-bright);
-            text-align: center;
-            margin: 12px 0;
-            text-shadow: 0 0 20px var(--gold-glow);
+        .btn-danger:hover {
+            background: rgba(239, 68, 68, 0.3);
+            color: #fff;
         }
 
         /* Platform Tabs & Guides */
@@ -825,8 +1099,9 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
             </a>
         </div>
         <div class="nav-controls">
-            <button class="auth-status-btn" id="authBtn" onclick="openAuthModal()">
-                <span id="authBtnText">LINK ACCOUNT</span>
+            <button class="auth-status-btn" id="authNavBtn" onclick="handleAuthNavClick()">
+                <span id="authNavIcon">👤</span>
+                <span id="authNavText">LOGIN / REGISTER</span>
             </button>
             <button class="audio-toggle-btn" onclick="toggleAudio()" id="audioBtn">
                 <span id="audioIcon">OFF</span> <span id="audioTxt">MUSIC</span>
@@ -864,50 +1139,136 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
         </div>
         <div class="status-card">
             <h4 id="lblOnlinePlayers">ONLINE PLAYERS</h4>
-            <div class="val" id="playerCountVal" style="color:var(--gold-bright);">0</div>
+            <div class="val" id="playerCountVal" style="color:var(--gold-bright);">1</div>
         </div>
     </section>
 
-    <!-- IN-GAME SYNC LOGIN MODAL -->
-    <div class="portal-modal" id="authModal">
-        <div class="portal-box" style="max-width: 520px; text-align: center;">
+    <!-- LOGIN / REGISTER MODAL -->
+    <div class="portal-modal" id="loginModal">
+        <div class="portal-box" style="max-width: 480px;">
             <div class="portal-header">
-                <h3 id="authModalTitle">IN-GAME ACCOUNT SYNC</h3>
-                <button onclick="closeAuthModal()" style="background:transparent; border:none; color:var(--gold-bright); font-size:26px; cursor:pointer;">&times;</button>
+                <h3 id="authModalHeader">PORTAL ACCESS</h3>
+                <button onclick="closeLoginModal()" style="background:transparent; border:none; color:var(--gold-bright); font-size:26px; cursor:pointer;">&times;</button>
             </div>
 
-            <div id="authStep1">
-                <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 20px;" id="authDesc">
-                    Enter your in-game username to safely connect your character with the web store:
-                </p>
-                <input type="text" id="targetGrowId" placeholder="Enter In-Game Name..." class="auth-input">
-                <button class="btn-buy" onclick="submitLinkRequest()" id="btnStartLink">CONTINUE</button>
+            <div class="auth-tabs">
+                <button class="auth-tab-btn active" id="tabLogin" onclick="switchAuthTab('login')">SIGN IN</button>
+                <button class="auth-tab-btn" id="tabRegister" onclick="switchAuthTab('register')">CREATE ACCOUNT</button>
             </div>
 
-            <div id="authStep2" style="display:none;">
-                <p style="color: var(--text-muted); font-size: 14px;">Your verification code has been generated:</p>
-                <div class="code-display" id="displayCode">----</div>
-                <div class="sync-step-box">
-                    <h5 style="color:var(--gold-bright); font-size:14px; margin-bottom:6px;">HOW TO VERIFY IN-GAME:</h5>
-                    <p style="font-size:13px; color:var(--text-muted); line-height:1.5;">
-                        1. Open Growtopia & login to your character.<br>
-                        2. Type <b>/accept</b> in chat.<br>
-                        3. Click <b>[ACCEPT]</b> for Code: <span id="codeSpan" style="color:var(--gold-bright); font-weight:bold;">----</span>.<br>
-                        4. This window will automatically verify!
-                    </p>
+            <div class="alert-box alert-error" id="authErrorBox"></div>
+            <div class="alert-box alert-success" id="authSuccessBox"></div>
+
+            <!-- Login Form -->
+            <form id="formLogin" onsubmit="handleLoginSubmit(event)">
+                <div class="form-group">
+                    <label>Username</label>
+                    <input type="text" id="loginUsername" class="auth-input" placeholder="Enter username..." required autocomplete="username">
                 </div>
-                <div style="font-size:13px; color:#10b981; font-weight:bold;" id="pollingStatus">
-                    Waiting for in-game /accept confirmation...
+                <div class="form-group">
+                    <label>Password</label>
+                    <input type="password" id="loginPassword" class="auth-input" placeholder="Enter password..." required autocomplete="current-password">
+                </div>
+                <button type="submit" class="btn-buy" style="margin-top: 10px;">SIGN IN</button>
+            </form>
+
+            <!-- Register Form -->
+            <form id="formRegister" onsubmit="handleRegisterSubmit(event)" style="display:none;">
+                <div class="form-group">
+                    <label>Username</label>
+                    <input type="text" id="regUsername" class="auth-input" placeholder="Choose username (min 4 chars)..." required minlength="4" autocomplete="username">
+                    <div class="form-helper">Minimum 4 characters (letters, numbers, _ -)</div>
+                </div>
+                <div class="form-group">
+                    <label>Password</label>
+                    <input type="password" id="regPassword" class="auth-input" placeholder="Choose password (min 6 chars)..." required minlength="6" autocomplete="new-password">
+                    <div class="form-helper">Minimum 6 characters</div>
+                </div>
+                <div class="form-group">
+                    <label>Confirm Password</label>
+                    <input type="password" id="regConfirmPassword" class="auth-input" placeholder="Repeat password..." required minlength="6" autocomplete="new-password">
+                </div>
+                <button type="submit" class="btn-buy" style="margin-top: 10px;">CREATE ACCOUNT</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- LOGGED IN ACCOUNT / PROFILE MODAL -->
+    <div class="portal-modal" id="accountModal">
+        <div class="portal-box" style="max-width: 640px;">
+            <div class="portal-header">
+                <h3>ACCOUNT DASHBOARD</h3>
+                <button onclick="closeAccountModal()" style="background:transparent; border:none; color:var(--gold-bright); font-size:26px; cursor:pointer;">&times;</button>
+            </div>
+
+            <div class="account-hero-box">
+                <div style="font-size: 13px; font-weight: 800; color: var(--gold-light); text-transform: uppercase;">WELCOME BACK</div>
+                <div style="font-size: 26px; font-weight: 900; color: #fff; margin-top: 4px;" id="accUsernameDisplay">--</div>
+                
+                <div style="margin-top: 16px; font-size: 13px; color: var(--text-muted); font-weight: 600;">
+                    YOUR PERMANENT UNIQUE LINK CODE:
+                </div>
+                <div class="unique-code-box">
+                    <div class="code-number" id="accUniqueCode">------</div>
+                    <button class="btn-copy-code" onclick="copyUniqueCode()">COPY CODE</button>
+                </div>
+                <p style="font-size: 12px; color: var(--text-muted);">
+                    This code is permanently assigned to your account and never changes. Use it in-game to sync your GrowID.
+                </p>
+            </div>
+
+            <!-- Link Status Section -->
+            <div id="accUnlinkedSection" style="display:none; background: rgba(212, 175, 55, 0.08); border: 1px dashed var(--gold-primary); border-radius: 12px; padding: 20px; margin-bottom: 20px;">
+                <div style="display:flex; align-items:center; gap:10px; margin-bottom: 12px;">
+                    <span style="font-size: 20px; color: var(--gold-bright);">⚠️</span>
+                    <h4 style="font-size: 16px; font-weight: 800; color: var(--gold-bright);">No In-Game Character Linked</h4>
+                </div>
+                <p style="font-size: 13px; color: var(--text-muted); line-height: 1.6; margin-bottom: 14px;">
+                    Follow these 3 quick steps to link your Growtopia character:
+                </p>
+                <div style="font-size: 13px; color: #fff; line-height: 1.8; background: #080604; padding: 14px; border-radius: 8px; border: 1px solid #382c16;">
+                    1. Log into the server in Growtopia.<br>
+                    2. Type <b style="color:var(--gold-bright);">/accept</b> in the chat.<br>
+                    3. Enter your 6-digit code <b style="color:var(--gold-bright);" id="accCodeGuide">------</b> and submit.<br>
+                    <span style="color:#10b981; font-weight:bold;">Your account will instantly verify and sync live!</span>
                 </div>
             </div>
 
-            <div id="authStep3" style="display:none;">
-                <div style="font-size:42px; color:#10b981; margin-bottom:10px;">SUCCESS</div>
-                <h4 style="font-size:20px; color:#fff; margin-bottom:8px;">Account Verified!</h4>
-                <p style="color:var(--text-muted); font-size:14px; margin-bottom:20px;">
-                    Logged in as <b id="loggedInGrowId" style="color:var(--gold-bright);"></b>
-                </p>
-                <button class="btn-buy" onclick="closeAuthModal()">CONTINUE TO STORE</button>
+            <div id="accLinkedSection" style="display:none; background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.4); border-radius: 12px; padding: 20px; margin-bottom: 20px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom: 14px;">
+                    <div>
+                        <span style="font-size: 11px; font-weight: 800; color: #10b981; text-transform: uppercase;">VERIFIED GROWID</span>
+                        <h4 style="font-size: 20px; font-weight: 900; color: #ffffff; display: flex; align-items: center; gap: 8px;">
+                            <span id="accLinkedGrowId">--</span>
+                            <span style="font-size: 11px; padding: 2px 8px; border-radius: 12px; background: rgba(16,185,129,0.2); border: 1px solid #10b981; color: #10b981;">SYNCED</span>
+                        </h4>
+                    </div>
+                    <button class="btn-danger" onclick="unlinkAccount()">UNLINK GROWID</button>
+                </div>
+
+                <div class="char-stats-grid">
+                    <div class="stat-badge">
+                        <div class="lbl">STATUS</div>
+                        <div class="val" id="accLiveStatus">OFFLINE</div>
+                    </div>
+                    <div class="stat-badge">
+                        <div class="lbl">WORLD</div>
+                        <div class="val" id="accLiveWorld">--</div>
+                    </div>
+                    <div class="stat-badge">
+                        <div class="lbl">GEMS</div>
+                        <div class="val" id="accLiveGems" style="color:var(--gold-bright);">0</div>
+                    </div>
+                    <div class="stat-badge">
+                        <div class="lbl">WORLD LOCKS</div>
+                        <div class="val" id="accLiveWL" style="color:var(--gold-bright);">0</div>
+                    </div>
+                </div>
+            </div>
+
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-top: 10px;">
+                <button class="btn-glow-store" style="flex:1; padding: 12px;" onclick="closeAccountModal(); openShopModal();">VISIT STORE</button>
+                <button class="btn-danger" style="padding: 12px 24px;" onclick="handleLogout()">LOGOUT</button>
             </div>
         </div>
     </div>
@@ -1197,9 +1558,9 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
     <script>
         let currentLang = localStorage.getItem('voidps_lang') || 'en';
         let audioPlaying = false;
-        let activeRequestId = null;
-        let activePollTimer = null;
-        let verifiedUser = localStorage.getItem('voidps_verified_user') || null;
+        let authToken = localStorage.getItem('voidps_token') || null;
+        let currentUser = null;
+        let profilePollTimer = null;
 
         function toggleAudio() {
             const audio = document.getElementById('bgAudio');
@@ -1216,73 +1577,271 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
             }
         }
 
-        function openAuthModal() {
-            if (verifiedUser) {
-                document.getElementById('authStep1').style.display = 'none';
-                document.getElementById('authStep2').style.display = 'none';
-                document.getElementById('authStep3').style.display = 'block';
-                document.getElementById('loggedInGrowId').innerText = verifiedUser;
+        function handleAuthNavClick() {
+            if (currentUser) {
+                openAccountModal();
             } else {
-                document.getElementById('authStep1').style.display = 'block';
-                document.getElementById('authStep2').style.display = 'none';
-                document.getElementById('authStep3').style.display = 'none';
+                openLoginModal();
             }
-            document.getElementById('authModal').style.display = 'flex';
         }
 
-        function closeAuthModal() {
-            document.getElementById('authModal').style.display = 'none';
-            if (activePollTimer) clearInterval(activePollTimer);
+        function openLoginModal() {
+            document.getElementById('authErrorBox').style.display = 'none';
+            document.getElementById('authSuccessBox').style.display = 'none';
+            document.getElementById('loginModal').style.display = 'flex';
         }
 
-        async function submitLinkRequest() {
-            const name = document.getElementById('targetGrowId').value;
-            if (!name || name.trim() === '') {
-                alert('Please enter your in-game name!');
+        function closeLoginModal() {
+            document.getElementById('loginModal').style.display = 'none';
+        }
+
+        function openAccountModal() {
+            if (!currentUser) {
+                openLoginModal();
+                return;
+            }
+            renderAccountDashboard();
+            document.getElementById('accountModal').style.display = 'flex';
+        }
+
+        function closeAccountModal() {
+            document.getElementById('accountModal').style.display = 'none';
+        }
+
+        function switchAuthTab(tab) {
+            const tabLogin = document.getElementById('tabLogin');
+            const tabRegister = document.getElementById('tabRegister');
+            const formLogin = document.getElementById('formLogin');
+            const formRegister = document.getElementById('formRegister');
+            const errBox = document.getElementById('authErrorBox');
+            const succBox = document.getElementById('authSuccessBox');
+
+            errBox.style.display = 'none';
+            succBox.style.display = 'none';
+
+            if (tab === 'login') {
+                tabLogin.classList.add('active');
+                tabRegister.classList.remove('active');
+                formLogin.style.display = 'block';
+                formRegister.style.display = 'none';
+            } else {
+                tabRegister.classList.add('active');
+                tabLogin.classList.remove('active');
+                formRegister.style.display = 'block';
+                formLogin.style.display = 'none';
+            }
+        }
+
+        async function handleLoginSubmit(e) {
+            e.preventDefault();
+            const username = document.getElementById('loginUsername').value.trim();
+            const password = document.getElementById('loginPassword').value;
+            const errBox = document.getElementById('authErrorBox');
+            const succBox = document.getElementById('authSuccessBox');
+
+            errBox.style.display = 'none';
+            succBox.style.display = 'none';
+
+            try {
+                const res = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                const data = await res.json();
+
+                if (data.success) {
+                    authToken = data.token;
+                    currentUser = data.user;
+                    localStorage.setItem('voidps_token', authToken);
+                    succBox.innerText = 'Login successful! Opening dashboard...';
+                    succBox.style.display = 'block';
+                    updateNavUserState();
+                    setTimeout(() => {
+                        closeLoginModal();
+                        openAccountModal();
+                    }, 600);
+                } else {
+                    errBox.innerText = data.error || 'Login failed';
+                    errBox.style.display = 'block';
+                }
+            } catch (err) {
+                errBox.innerText = 'Connection error. Please try again.';
+                errBox.style.display = 'block';
+            }
+        }
+
+        async function handleRegisterSubmit(e) {
+            e.preventDefault();
+            const username = document.getElementById('regUsername').value.trim();
+            const password = document.getElementById('regPassword').value;
+            const confirmPassword = document.getElementById('regConfirmPassword').value;
+            const errBox = document.getElementById('authErrorBox');
+            const succBox = document.getElementById('authSuccessBox');
+
+            errBox.style.display = 'none';
+            succBox.style.display = 'none';
+
+            if (username.length < 4) {
+                errBox.innerText = 'Username must be at least 4 characters.';
+                errBox.style.display = 'block';
+                return;
+            }
+
+            if (password.length < 6) {
+                errBox.innerText = 'Password must be at least 6 characters.';
+                errBox.style.display = 'block';
+                return;
+            }
+
+            if (password !== confirmPassword) {
+                errBox.innerText = 'Passwords do not match!';
+                errBox.style.display = 'block';
                 return;
             }
 
             try {
-                const res = await fetch('/api/link-request', {
+                const res = await fetch('/api/auth/register', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ growId: name.trim() })
+                    body: JSON.stringify({ username, password })
                 });
                 const data = await res.json();
-                if (data.success) {
-                    activeRequestId = data.requestId;
-                    document.getElementById('displayCode').innerText = data.code;
-                    document.getElementById('codeSpan').innerText = data.code;
-                    document.getElementById('authStep1').style.display = 'none';
-                    document.getElementById('authStep2').style.display = 'block';
 
-                    if (activePollTimer) clearInterval(activePollTimer);
-                    activePollTimer = setInterval(pollAuthStatus, 2000);
+                if (data.success) {
+                    authToken = data.token;
+                    currentUser = data.user;
+                    localStorage.setItem('voidps_token', authToken);
+                    succBox.innerText = 'Account created successfully! Your unique link code has been generated.';
+                    succBox.style.display = 'block';
+                    updateNavUserState();
+                    setTimeout(() => {
+                        closeLoginModal();
+                        openAccountModal();
+                    }, 800);
+                } else {
+                    errBox.innerText = data.error || 'Registration failed';
+                    errBox.style.display = 'block';
                 }
-            } catch (e) {
-                alert('Connection error');
+            } catch (err) {
+                errBox.innerText = 'Connection error. Please try again.';
+                errBox.style.display = 'block';
             }
         }
 
-        async function pollAuthStatus() {
-            if (!activeRequestId) return;
+        async function fetchUserProfile() {
+            if (!authToken) {
+                updateNavUserState();
+                return;
+            }
             try {
-                const res = await fetch('/api/link-status/' + activeRequestId);
-                const data = await res.json();
-                if (data.status === 'VERIFIED') {
-                    clearInterval(activePollTimer);
-                    verifiedUser = data.growId;
-                    localStorage.setItem('voidps_verified_user', verifiedUser);
-                    document.getElementById('authBtnText').innerText = '👑 ' + verifiedUser;
-                    document.getElementById('loggedInGrowId').innerText = verifiedUser;
-                    document.getElementById('authStep2').style.display = 'none';
-                    document.getElementById('authStep3').style.display = 'block';
+                const res = await fetch('/api/auth/me', {
+                    headers: { 'Authorization': 'Bearer ' + authToken }
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.success) {
+                        currentUser = data.user;
+                        updateNavUserState();
+                        renderAccountDashboard();
+                    }
+                } else {
+                    currentUser = null;
+                    authToken = null;
+                    localStorage.removeItem('voidps_token');
+                    updateNavUserState();
                 }
-            } catch (e) {}
+            } catch (e) {
+                console.error(e);
+            }
         }
 
-        if (verifiedUser) {
-            document.getElementById('authBtnText').innerText = '👑 ' + verifiedUser;
+        function updateNavUserState() {
+            const navText = document.getElementById('authNavText');
+            if (currentUser) {
+                if (currentUser.linkedGrowId) {
+                    navText.innerText = currentUser.username + ' • ' + currentUser.linkedGrowId;
+                } else {
+                    navText.innerText = currentUser.username + ' (LINK CODE)';
+                }
+            } else {
+                navText.innerText = 'LOGIN / REGISTER';
+            }
+        }
+
+        function renderAccountDashboard() {
+            if (!currentUser) return;
+
+            document.getElementById('accUsernameDisplay').innerText = currentUser.username;
+            document.getElementById('accUniqueCode').innerText = currentUser.uniqueCode;
+            document.getElementById('accCodeGuide').innerText = currentUser.uniqueCode;
+
+            const unlinkedSec = document.getElementById('accUnlinkedSection');
+            const linkedSec = document.getElementById('accLinkedSection');
+
+            if (currentUser.linkedGrowId) {
+                unlinkedSec.style.display = 'none';
+                linkedSec.style.display = 'block';
+                document.getElementById('accLinkedGrowId').innerText = currentUser.linkedGrowId;
+
+                const stats = currentUser.liveStats;
+                if (stats && stats.isOnline) {
+                    document.getElementById('accLiveStatus').innerText = 'ONLINE';
+                    document.getElementById('accLiveStatus').style.color = '#10b981';
+                    document.getElementById('accLiveWorld').innerText = stats.world || 'EXIT';
+                    document.getElementById('accLiveGems').innerText = (stats.gems || 0).toLocaleString();
+                    document.getElementById('accLiveWL').innerText = (stats.wl || 0).toLocaleString();
+                } else {
+                    document.getElementById('accLiveStatus').innerText = 'OFFLINE';
+                    document.getElementById('accLiveStatus').style.color = '#ef4444';
+                    document.getElementById('accLiveWorld').innerText = 'OFFLINE';
+                    document.getElementById('accLiveGems').innerText = stats ? (stats.gems || 0).toLocaleString() : '0';
+                    document.getElementById('accLiveWL').innerText = stats ? (stats.wl || 0).toLocaleString() : '0';
+                }
+            } else {
+                unlinkedSec.style.display = 'block';
+                linkedSec.style.display = 'none';
+            }
+        }
+
+        function copyUniqueCode() {
+            if (currentUser && currentUser.uniqueCode) {
+                navigator.clipboard.writeText(currentUser.uniqueCode);
+                alert('Copied Unique Link Code: ' + currentUser.uniqueCode);
+            }
+        }
+
+        async function unlinkAccount() {
+            if (!confirm('Are you sure you want to unlink this GrowID?')) return;
+            try {
+                const res = await fetch('/api/auth/unlink', {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + authToken }
+                });
+                const data = await res.json();
+                if (data.success) {
+                    currentUser.linkedGrowId = null;
+                    currentUser.liveStats = null;
+                    renderAccountDashboard();
+                    updateNavUserState();
+                }
+            } catch (e) {
+                alert('Error unlinking account');
+            }
+        }
+
+        async function handleLogout() {
+            try {
+                await fetch('/api/auth/logout', {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + authToken }
+                });
+            } catch (e) {}
+            currentUser = null;
+            authToken = null;
+            localStorage.removeItem('voidps_token');
+            closeAccountModal();
+            updateNavUserState();
         }
 
         const TRANSLATIONS = {
@@ -1459,7 +2018,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
         function closeShopModal() { document.getElementById('shopModal').style.display = 'none'; }
 
         function contactBuy(item) {
-            const userTag = verifiedUser ? ' (Linked Character: ' + verifiedUser + ')' : '';
+            const userTag = (currentUser && currentUser.linkedGrowId) ? ' (Linked Character: ' + currentUser.linkedGrowId + ')' : '';
             alert('To purchase ' + item + userTag + ', please join our Discord or message WhatsApp staff!');
         }
 
@@ -1557,6 +2116,9 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
 
         setInterval(fetchServerStatus, 2500);
         fetchServerStatus();
+
+        fetchUserProfile();
+        setInterval(fetchUserProfile, 3000);
     </script>
 </body>
 </html>`;
