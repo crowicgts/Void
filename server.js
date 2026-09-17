@@ -7,7 +7,7 @@ const crypto = require('crypto');
 const app = express();
 const PORT = process.env.PORT || 3000;
 const GTPS_PORT = process.env.GTPS_PORT || 25741;
-const GTPS_CLOUD_API = `https://api.gtps.cloud/g-api/${GTPS_PORT}/sync-from-web`;
+const GTPS_CLOUD_API = `https://api.gtps.cloud/g-api/${GTPS_PORT}/api/sync`;
 const GTPS_CLOUD_STATUS_API = `https://api.gtps.cloud/g-api/${GTPS_PORT}/status`;
 
 app.use(cors());
