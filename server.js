@@ -13,19 +13,23 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Database File Persistence
+// Database File Persistence with Sessions
 const DB_FILE = path.join(__dirname, 'users.json');
 
 function loadDatabase() {
     try {
         if (fs.existsSync(DB_FILE)) {
             const raw = fs.readFileSync(DB_FILE, 'utf8');
-            return JSON.parse(raw);
+            const parsed = JSON.parse(raw);
+            return {
+                users: parsed.users || [],
+                sessions: parsed.sessions || {}
+            };
         }
     } catch (e) {
         console.error('Error reading database:', e);
     }
-    return { users: [] };
+    return { users: [], sessions: {} };
 }
 
 function saveDatabase(db) {
@@ -37,7 +41,6 @@ function saveDatabase(db) {
 }
 
 let db = loadDatabase();
-const sessions = {}; // token -> userId
 
 function hashPassword(pwd) {
     return crypto.createHash('sha256').update(String(pwd)).digest('hex');
@@ -124,12 +127,12 @@ app.get('/api/status', (req, res) => {
 function getAuthUser(req) {
     const authHeader = req.headers['authorization'] || '';
     const token = authHeader.replace(/^Bearer\s+/i, '').trim();
-    if (!token || !sessions[token]) return null;
-    const userId = sessions[token];
+    if (!token || !db.sessions[token]) return null;
+    const userId = db.sessions[token];
     return db.users.find(u => u.id === userId) || null;
 }
 
-// User Registration (Min 4 char username, Min 6 char password)
+// User Registration
 app.post('/api/auth/register', (req, res) => {
     const { username, password } = req.body || {};
 
@@ -161,10 +164,10 @@ app.post('/api/auth/register', (req, res) => {
     };
 
     db.users.push(newUser);
-    saveDatabase(db);
 
     const token = crypto.randomBytes(24).toString('hex');
-    sessions[token] = newUser.id;
+    db.sessions[token] = newUser.id;
+    saveDatabase(db);
 
     return res.json({
         success: true,
@@ -194,7 +197,8 @@ app.post('/api/auth/login', (req, res) => {
     }
 
     const token = crypto.randomBytes(24).toString('hex');
-    sessions[token] = user.id;
+    db.sessions[token] = user.id;
+    saveDatabase(db);
 
     return res.json({
         success: true,
@@ -208,7 +212,7 @@ app.post('/api/auth/login', (req, res) => {
     });
 });
 
-// Current User Profile
+// Current User Profile & Live Stats
 app.get('/api/auth/me', (req, res) => {
     const user = getAuthUser(req);
     if (!user) {
@@ -249,8 +253,9 @@ app.get('/api/auth/me', (req, res) => {
 app.post('/api/auth/logout', (req, res) => {
     const authHeader = req.headers['authorization'] || '';
     const token = authHeader.replace(/^Bearer\s+/i, '').trim();
-    if (token && sessions[token]) {
-        delete sessions[token];
+    if (token && db.sessions[token]) {
+        delete db.sessions[token];
+        saveDatabase(db);
     }
     return res.json({ success: true });
 });
@@ -268,27 +273,34 @@ app.post('/api/auth/unlink', (req, res) => {
     return res.json({ success: true, message: 'Account unlinked successfully.' });
 });
 
-// In-Game /accept Verification Endpoint (4-digit code)
+// In-Game /accept & /link Verification Endpoint
 app.post('/api/link-verify', (req, res) => {
     const { growId, code } = req.body || {};
 
     if (!growId || !code) {
-        return res.status(400).json({ success: false, message: 'Missing GrowID or link code.' });
+        return res.status(400).json({ success: false, message: 'Missing GrowID or code' });
     }
 
     const cleanGrowId = String(growId).trim();
     const cleanCode = String(code).trim();
 
-    const user = db.users.find(u => u.uniqueCode === cleanCode);
+    const user = db.users.find(u => String(u.uniqueCode).trim() === cleanCode);
 
     if (!user) {
-        return res.status(404).json({ success: false, message: 'Invalid 4-digit link code.' });
+        return res.status(404).json({ success: false, message: 'Invalid 4-digit code' });
     }
+
+    // Unlink any other user linked to this GrowID
+    db.users.forEach(u => {
+        if (u.id !== user.id && (u.linkedGrowId || '').toLowerCase() === cleanGrowId.toLowerCase()) {
+            u.linkedGrowId = null;
+        }
+    });
 
     user.linkedGrowId = cleanGrowId;
     saveDatabase(db);
 
-    console.log(`[Account Linked] GrowID "${cleanGrowId}" linked to website account "${user.username}" (Code: ${cleanCode})`);
+    console.log(`[LINK SUCCESS] Linked GrowID "${cleanGrowId}" to website account "${user.username}" (Code: ${cleanCode})`);
 
     return res.json({
         success: true,
@@ -1339,7 +1351,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
                         <button class="btn-copy-code" onclick="copyUniqueCode()">COPY CODE</button>
                     </div>
                     <p style="font-size: 12px; color: var(--text-muted); line-height: 1.5;">
-                        To link your character, open Growtopia, type <b style="color:var(--gold-bright);">/accept</b> in chat, and enter your 4-digit code.
+                        To link your character, open Growtopia, type <b style="color:var(--gold-bright);">/link</b> or <b style="color:var(--gold-bright);">/accept</b> in chat, and enter your 4-digit code.
                     </p>
                 </div>
             </div>
@@ -1788,6 +1800,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
                     localStorage.setItem('voidps_token', authToken);
                     closeLoginModal();
                     updateNavUserState();
+                    renderAccountDashboard();
                     showToast('Welcome back, ' + currentUser.username + '!', 'success');
                 } else {
                     errBox.innerText = data.error || 'Login failed';
@@ -1842,7 +1855,8 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
                     localStorage.setItem('voidps_token', authToken);
                     closeLoginModal();
                     updateNavUserState();
-                    showToast('Account created successfully! Welcome, ' + currentUser.username, 'success');
+                    renderAccountDashboard();
+                    showToast('Account created! Your 4-digit code is ' + currentUser.uniqueCode, 'success');
                 } else {
                     errBox.innerText = data.error || 'Registration failed';
                     errBox.style.display = 'block';
@@ -1873,7 +1887,8 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
                         updateNavUserState();
                         renderAccountDashboard();
                     }
-                } else {
+                } else if (res.status === 401) {
+                    // Only remove if explicitly 401 Unauthorized
                     currentUser = null;
                     authToken = null;
                     localStorage.removeItem('voidps_token');
@@ -1887,7 +1902,11 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
         function updateNavUserState() {
             const navText = document.getElementById('authNavText');
             if (currentUser) {
-                navText.innerText = currentUser.username.toUpperCase();
+                if (currentUser.linkedGrowId) {
+                    navText.innerText = currentUser.username.toUpperCase() + ' • ' + currentUser.linkedGrowId.toUpperCase();
+                } else {
+                    navText.innerText = currentUser.username.toUpperCase();
+                }
             } else {
                 navText.innerText = 'LOGIN / REGISTER';
             }
@@ -2242,7 +2261,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
         fetchServerStatus();
 
         fetchUserProfile();
-        setInterval(fetchUserProfile, 3000);
+        setInterval(fetchUserProfile, 1500);
     </script>
 </body>
 </html>`;
