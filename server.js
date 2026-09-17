@@ -255,6 +255,19 @@ app.post('/api/auth/logout', (req, res) => {
     return res.json({ success: true });
 });
 
+// Unlink In-Game Account
+app.post('/api/auth/unlink', (req, res) => {
+    const user = getAuthUser(req);
+    if (!user) {
+        return res.status(401).json({ success: false, error: 'Unauthorized' });
+    }
+
+    user.linkedGrowId = null;
+    saveDatabase(db);
+
+    return res.json({ success: true, message: 'Account unlinked successfully.' });
+});
+
 // In-Game /accept Verification Endpoint (4-digit code)
 app.post('/api/link-verify', (req, res) => {
     const { growId, code } = req.body || {};
@@ -297,14 +310,14 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>VOID Private Server</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
     <style>
         :root {
             --bg-black: #080706;
-            --bg-card: rgba(22, 18, 12, 0.92);
-            --bg-card-hover: rgba(36, 30, 18, 0.96);
+            --bg-card: rgba(22, 18, 12, 0.94);
+            --bg-card-hover: rgba(36, 30, 18, 0.98);
             --gold-primary: #d4af37;
             --gold-bright: #fbbf24;
             --gold-light: #fef08a;
@@ -318,18 +331,26 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
             --whatsapp-color: #25d366;
         }
 
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        * { 
+            box-sizing: border-box; 
+            margin: 0; 
+            padding: 0; 
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+            -webkit-tap-highlight-color: transparent;
+        }
 
-        body {
+        html, body {
+            width: 100%;
+            min-height: 100%;
             background-color: var(--bg-black);
             color: var(--text-main);
-            min-height: 100vh;
             overflow-x: hidden;
             position: relative;
             background-image: 
                 radial-gradient(circle at 15% 15%, rgba(212, 175, 55, 0.15) 0%, transparent 45%),
                 radial-gradient(circle at 85% 15%, rgba(251, 191, 36, 0.12) 0%, transparent 45%),
                 radial-gradient(circle at 50% 85%, rgba(180, 130, 20, 0.2) 0%, transparent 55%);
+            padding-bottom: env(safe-area-inset-bottom);
         }
 
         #gold-canvas {
@@ -339,16 +360,16 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
             z-index: 0;
         }
 
-        /* Navbar */
+        /* Responsive Navbar */
         .navbar {
             position: relative;
             z-index: 10;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 0 44px;
-            height: 76px;
-            background: rgba(12, 10, 8, 0.95);
+            padding: 0 28px;
+            height: 72px;
+            background: rgba(12, 10, 8, 0.96);
             border-bottom: 2px solid var(--gold-border);
             box-shadow: 0 4px 30px rgba(0, 0, 0, 0.95), 0 0 25px rgba(212, 175, 55, 0.2);
         }
@@ -356,16 +377,16 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
         .nav-socials {
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 10px;
         }
 
         .social-btn {
             display: flex;
             align-items: center;
             justify-content: center;
-            width: 42px;
-            height: 42px;
-            border-radius: 10px;
+            width: 38px;
+            height: 38px;
+            border-radius: 8px;
             background: rgba(255, 255, 255, 0.05);
             border: 1px solid var(--gold-border);
             color: #ffffff;
@@ -381,28 +402,28 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
 
         .social-btn.discord:hover { background: var(--discord-color); border-color: var(--discord-color); }
         .social-btn.whatsapp:hover { background: var(--whatsapp-color); border-color: var(--whatsapp-color); }
-
-        .social-btn svg { width: 22px; height: 22px; fill: currentColor; }
+        .social-btn svg { width: 20px; height: 20px; fill: currentColor; }
 
         .nav-controls {
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 10px;
         }
 
         .user-nav-btn {
             background: rgba(212, 175, 55, 0.2);
             border: 1px solid var(--gold-border);
             color: var(--gold-bright);
-            padding: 9px 18px;
+            padding: 8px 16px;
             border-radius: 8px;
             cursor: pointer;
             font-weight: 800;
             font-size: 13px;
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 6px;
             transition: all 0.2s ease;
+            white-space: nowrap;
         }
 
         .user-nav-btn:hover {
@@ -415,15 +436,16 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
             background: rgba(212, 175, 55, 0.15);
             border: 1px solid var(--gold-border);
             color: #fff;
-            padding: 9px 16px;
+            padding: 8px 14px;
             border-radius: 8px;
             cursor: pointer;
             font-weight: 800;
             font-size: 13px;
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 6px;
             transition: all 0.2s ease;
+            white-space: nowrap;
         }
 
         .audio-toggle-btn:hover {
@@ -435,15 +457,16 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
             background: rgba(212, 175, 55, 0.15);
             border: 1px solid var(--gold-border);
             color: #fff;
-            padding: 9px 18px;
+            padding: 8px 14px;
             border-radius: 8px;
             cursor: pointer;
             font-weight: 800;
             font-size: 13px;
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 8px;
             transition: all 0.25s ease;
+            white-space: nowrap;
         }
 
         .lang-switch-btn:hover {
@@ -452,23 +475,23 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
             transform: translateY(-2px);
         }
 
-        .flag-img { width: 22px; height: 15px; border-radius: 2px; object-fit: cover; }
+        .flag-img { width: 20px; height: 14px; border-radius: 2px; object-fit: cover; }
 
-        /* Hero */
+        /* Hero Section */
         .hero {
             position: relative;
             z-index: 1;
-            padding: 60px 20px 30px 20px;
+            padding: 50px 20px 24px 20px;
             text-align: center;
             max-width: 900px;
             margin: 0 auto;
         }
 
         .main-logo-img {
-            max-width: 460px;
-            width: 85%;
+            max-width: 440px;
+            width: 82%;
             height: auto;
-            margin-bottom: 24px;
+            margin-bottom: 20px;
             filter: drop-shadow(0 0 35px rgba(212, 175, 55, 0.7));
             animation: floatLogo 3.5s ease-in-out infinite alternate;
         }
@@ -480,10 +503,10 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
 
         .hero p {
             color: var(--text-muted);
-            font-size: 16px;
-            margin-bottom: 36px;
+            font-size: 15px;
+            margin-bottom: 32px;
             line-height: 1.6;
-            max-width: 680px;
+            max-width: 660px;
             margin-left: auto;
             margin-right: auto;
             font-weight: 500;
@@ -492,51 +515,51 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
         .hero-action-buttons {
             display: flex;
             justify-content: center;
-            gap: 20px;
+            gap: 16px;
             flex-wrap: wrap;
-            margin-bottom: 40px;
+            margin-bottom: 36px;
         }
 
         .btn-glow-gold {
-            font-size: 15px;
+            font-size: 14px;
             font-weight: 900;
             letter-spacing: 1px;
             text-transform: uppercase;
             background: linear-gradient(135deg, #b45309, #d4af37, #fbbf24);
             border: 2px solid var(--gold-bright);
             color: #000000;
-            padding: 16px 38px;
+            padding: 14px 34px;
             border-radius: 10px;
             cursor: pointer;
             box-shadow: 0 0 30px rgba(212, 175, 55, 0.7);
             transition: all 0.3s ease;
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 8px;
         }
 
         .btn-glow-gold:hover {
-            transform: translateY(-3px) scale(1.03);
+            transform: translateY(-3px) scale(1.02);
             box-shadow: 0 0 45px rgba(251, 191, 36, 1);
             filter: brightness(1.15);
         }
 
         .btn-glow-store {
-            font-size: 15px;
+            font-size: 14px;
             font-weight: 900;
             letter-spacing: 1px;
             text-transform: uppercase;
             background: rgba(22, 18, 12, 0.9);
             border: 2px solid var(--gold-border);
             color: var(--gold-bright);
-            padding: 16px 38px;
+            padding: 14px 34px;
             border-radius: 10px;
             cursor: pointer;
             box-shadow: 0 0 20px rgba(0,0,0,0.6);
             transition: all 0.3s ease;
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 8px;
         }
 
         .btn-glow-store:hover {
@@ -549,22 +572,20 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
 
         /* Status Cards */
         .status-container {
-            max-width: 680px;
-            margin: 0 auto 50px auto;
+            max-width: 640px;
+            margin: 0 auto 40px auto;
             display: grid;
             grid-template-columns: repeat(2, 1fr);
-            gap: 20px;
+            gap: 16px;
             position: relative;
             z-index: 1;
             padding: 0 20px;
         }
 
-        @media (max-width: 500px) { .status-container { grid-template-columns: 1fr; } }
-
         .status-card {
             background: var(--bg-card);
             border: 1px solid var(--gold-border);
-            padding: 26px;
+            padding: 22px;
             border-radius: 14px;
             box-shadow: 0 10px 35px rgba(0, 0, 0, 0.75);
             backdrop-filter: blur(12px);
@@ -579,52 +600,55 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
         }
 
         .status-card h4 {
-            font-size: 13px;
+            font-size: 12px;
             text-transform: uppercase;
             letter-spacing: 2px;
             color: var(--gold-bright);
-            margin-bottom: 8px;
+            margin-bottom: 6px;
             font-weight: 800;
         }
 
         .status-card .val {
-            font-size: 32px;
+            font-size: 28px;
             font-weight: 900;
             color: #ffffff;
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 12px;
+            gap: 10px;
         }
 
-        /* Modals */
+        /* Responsive Modals */
         .portal-modal {
             position: fixed;
             top: 0; left: 0; width: 100vw; height: 100vh;
             background: rgba(0, 0, 0, 0.92);
             backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
             z-index: 100;
             display: none;
             align-items: center;
             justify-content: center;
-            padding: 20px;
+            padding: 16px;
+            overflow-y: auto;
         }
 
         .portal-box {
             background: #0f0d0a;
             border: 2px solid var(--gold-primary);
-            border-radius: 18px;
-            width: 920px;
+            border-radius: 16px;
+            width: 880px;
             max-width: 100%;
             max-height: 90vh;
             overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
             box-shadow: 0 0 60px rgba(212, 175, 55, 0.55);
-            padding: 34px;
+            padding: 28px;
             animation: popIn 0.25s ease;
         }
 
         @keyframes popIn {
-            from { transform: scale(0.92); opacity: 0; }
+            from { transform: scale(0.94); opacity: 0; }
             to { transform: scale(1); opacity: 1; }
         }
 
@@ -632,13 +656,13 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 24px;
-            padding-bottom: 16px;
+            margin-bottom: 20px;
+            padding-bottom: 14px;
             border-bottom: 1px solid var(--gold-border);
         }
 
         .portal-header h3 {
-            font-size: 22px;
+            font-size: 20px;
             font-weight: 900;
             color: var(--gold-bright);
             letter-spacing: 1px;
@@ -648,7 +672,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
         .auth-tabs {
             display: flex;
             border-bottom: 2px solid var(--gold-border);
-            margin-bottom: 22px;
+            margin-bottom: 20px;
             gap: 10px;
         }
 
@@ -659,7 +683,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
             padding: 12px;
             color: var(--text-muted);
             font-weight: 800;
-            font-size: 15px;
+            font-size: 14px;
             cursor: pointer;
             border-bottom: 3px solid transparent;
             transition: all 0.2s ease;
@@ -671,13 +695,13 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
         }
 
         .form-group {
-            margin-bottom: 16px;
+            margin-bottom: 14px;
             text-align: left;
         }
 
         .form-group label {
             display: block;
-            font-size: 13px;
+            font-size: 12px;
             font-weight: 700;
             color: var(--gold-light);
             margin-bottom: 6px;
@@ -686,7 +710,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
         }
 
         .form-helper {
-            font-size: 12px;
+            font-size: 11px;
             color: var(--text-muted);
             margin-top: 4px;
         }
@@ -695,7 +719,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
             width: 100%;
             background: #050403;
             border: 1px solid var(--gold-border);
-            padding: 14px 16px;
+            padding: 13px 15px;
             border-radius: 8px;
             color: #ffffff;
             font-size: 15px;
@@ -732,11 +756,11 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
 
         /* Account Details Box */
         .account-hero-box {
-            background: rgba(26, 22, 14, 0.9);
+            background: rgba(26, 22, 14, 0.92);
             border: 1px solid var(--gold-border);
             border-radius: 14px;
-            padding: 24px;
-            margin-bottom: 24px;
+            padding: 22px;
+            margin-bottom: 20px;
             text-align: center;
         }
 
@@ -744,8 +768,8 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
             background: #060504;
             border: 2px dashed var(--gold-bright);
             border-radius: 12px;
-            padding: 18px;
-            margin: 16px 0;
+            padding: 16px;
+            margin: 14px 0;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -754,7 +778,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
         }
 
         .code-number {
-            font-size: 36px;
+            font-size: 34px;
             font-weight: 900;
             letter-spacing: 8px;
             color: var(--gold-bright);
@@ -781,9 +805,9 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
 
         .char-stats-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-            gap: 12px;
-            margin-top: 16px;
+            grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+            gap: 10px;
+            margin-top: 14px;
         }
 
         .stat-badge {
@@ -794,21 +818,21 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
             text-align: center;
         }
 
-        .stat-badge .lbl { font-size: 11px; text-transform: uppercase; color: var(--gold-bright); font-weight: 800; }
+        .stat-badge .lbl { font-size: 10px; text-transform: uppercase; color: var(--gold-bright); font-weight: 800; }
         .stat-badge .val { font-size: 16px; font-weight: 900; color: #fff; margin-top: 4px; }
 
         /* Shop Grid */
         .shop-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-            gap: 20px;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 18px;
         }
 
         .shop-card {
-            background: rgba(24, 20, 14, 0.85);
+            background: rgba(24, 20, 14, 0.88);
             border: 1px solid var(--gold-border);
             border-radius: 12px;
-            padding: 22px;
+            padding: 20px;
             text-align: center;
             display: flex;
             flex-direction: column;
@@ -832,19 +856,19 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
             font-size: 11px;
             font-weight: 800;
             display: inline-block;
-            margin-bottom: 12px;
+            margin-bottom: 10px;
             text-transform: uppercase;
         }
 
-        .shop-card h4 { font-size: 19px; font-weight: 900; color: #ffffff; margin-bottom: 6px; }
-        .shop-card .price { font-size: 22px; font-weight: 900; color: var(--gold-bright); margin-bottom: 14px; }
+        .shop-card h4 { font-size: 18px; font-weight: 900; color: #ffffff; margin-bottom: 6px; }
+        .shop-card .price { font-size: 20px; font-weight: 900; color: var(--gold-bright); margin-bottom: 12px; }
 
         .shop-perks-list {
             text-align: left;
             font-size: 13px;
             color: var(--text-muted);
             line-height: 1.6;
-            margin-bottom: 20px;
+            margin-bottom: 18px;
             list-style: none;
         }
 
@@ -878,19 +902,19 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
         .btn-buy:hover { box-shadow: 0 0 20px var(--gold-glow); filter: brightness(1.1); }
 
         .btn-danger {
-            background: rgba(239, 68, 68, 0.2);
-            border: 1px solid rgba(239, 68, 68, 0.6);
+            background: rgba(239, 68, 68, 0.15);
+            border: 1px solid rgba(239, 68, 68, 0.5);
             color: #fca5a5;
-            padding: 12px 24px;
+            padding: 10px 20px;
             border-radius: 8px;
             font-weight: 800;
-            font-size: 14px;
+            font-size: 13px;
             cursor: pointer;
             transition: all 0.2s ease;
         }
 
         .btn-danger:hover {
-            background: rgba(239, 68, 68, 0.4);
+            background: rgba(239, 68, 68, 0.3);
             color: #ffffff;
             box-shadow: 0 0 20px rgba(239, 68, 68, 0.4);
         }
@@ -898,8 +922,8 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
         /* Platform Tabs & Guides */
         .platform-tabs {
             display: flex;
-            gap: 10px;
-            margin-bottom: 24px;
+            gap: 8px;
+            margin-bottom: 20px;
             flex-wrap: wrap;
         }
 
@@ -907,15 +931,15 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
             background: rgba(22, 18, 12, 0.85);
             border: 1px solid var(--gold-border);
             color: var(--text-muted);
-            padding: 10px 22px;
+            padding: 9px 18px;
             border-radius: 8px;
             font-weight: 800;
-            font-size: 14px;
+            font-size: 13px;
             cursor: pointer;
             transition: all 0.2s ease;
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 6px;
         }
 
         .plat-btn:hover { color: white; border-color: var(--gold-bright); }
@@ -930,16 +954,16 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
             background: #14100b;
             border: 1px solid var(--gold-border);
             border-radius: 14px;
-            padding: 26px;
+            padding: 22px;
             display: flex;
             flex-direction: column;
-            gap: 22px;
+            gap: 18px;
         }
 
-        .step-item { display: flex; gap: 18px; }
+        .step-item { display: flex; gap: 16px; }
         .step-num {
-            width: 36px;
-            height: 36px;
+            width: 32px;
+            height: 32px;
             border-radius: 50%;
             background: rgba(212, 175, 55, 0.25);
             border: 2px solid var(--gold-primary);
@@ -948,13 +972,13 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
             align-items: center;
             justify-content: center;
             font-weight: 900;
-            font-size: 16px;
+            font-size: 15px;
             flex-shrink: 0;
             box-shadow: 0 0 12px var(--gold-glow);
         }
 
-        .step-content h4 { font-size: 17px; font-weight: 800; color: #ffffff; margin-bottom: 4px; }
-        .step-content p { font-size: 14px; color: var(--text-muted); line-height: 1.5; font-weight: 500; }
+        .step-content h4 { font-size: 16px; font-weight: 800; color: #ffffff; margin-bottom: 4px; }
+        .step-content p { font-size: 13px; color: var(--text-muted); line-height: 1.5; font-weight: 500; }
 
         .code-snippet {
             background: #050403;
@@ -972,12 +996,12 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
             background: rgba(212, 175, 55, 0.2);
             border: 1px solid var(--gold-primary);
             color: var(--gold-light);
-            padding: 9px 18px;
+            padding: 8px 16px;
             border-radius: 6px;
             font-weight: 800;
-            font-size: 13px;
+            font-size: 12px;
             cursor: pointer;
-            margin-top: 10px;
+            margin-top: 8px;
             display: inline-flex;
             align-items: center;
             gap: 6px;
@@ -989,8 +1013,8 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
             background: rgba(212, 175, 55, 0.08);
             border: 1px dashed var(--gold-primary);
             border-radius: 12px;
-            padding: 18px;
-            margin-bottom: 22px;
+            padding: 16px;
+            margin-bottom: 18px;
         }
 
         /* Language Modal */
@@ -1003,38 +1027,39 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
             display: flex;
             align-items: center;
             justify-content: center;
+            padding: 16px;
         }
 
         .lang-box {
             background: #110e0a;
             border: 2px solid var(--gold-primary);
             border-radius: 20px;
-            padding: 40px;
+            padding: 34px;
             text-align: center;
-            max-width: 480px;
-            width: 90%;
+            max-width: 440px;
+            width: 100%;
             box-shadow: 0 0 70px rgba(212, 175, 55, 0.6);
             animation: popIn 0.3s ease;
         }
 
-        .lang-box h3 { font-size: 24px; font-weight: 900; color: var(--gold-bright); margin-bottom: 6px; letter-spacing: 1px; }
-        .lang-options { display: flex; gap: 16px; margin-top: 26px; }
+        .lang-box h3 { font-size: 22px; font-weight: 900; color: var(--gold-bright); margin-bottom: 6px; letter-spacing: 1px; }
+        .lang-options { display: flex; gap: 14px; margin-top: 22px; }
 
         .lang-choice-btn {
             flex: 1;
             background: rgba(26, 22, 16, 0.9);
             border: 2px solid var(--gold-border);
-            padding: 22px 16px;
+            padding: 18px 12px;
             border-radius: 14px;
             color: white;
             font-weight: 800;
-            font-size: 16px;
+            font-size: 15px;
             cursor: pointer;
             transition: all 0.25s ease;
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 12px;
+            gap: 10px;
         }
 
         .lang-choice-btn:hover {
@@ -1044,11 +1069,121 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
             transform: translateY(-4px);
         }
 
-        .choice-flag { width: 50px; height: 33px; border-radius: 4px; box-shadow: 0 0 15px rgba(0,0,0,0.6); object-fit: cover; }
+        .choice-flag { width: 44px; height: 30px; border-radius: 4px; box-shadow: 0 0 15px rgba(0,0,0,0.6); object-fit: cover; }
+
+        /* Gold Theme Toast Notification */
+        #toastContainer {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            pointer-events: none;
+        }
+
+        .gold-toast {
+            pointer-events: auto;
+            background: #110e0a;
+            border: 1px solid var(--gold-bright);
+            color: #ffffff;
+            padding: 14px 20px;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.9), 0 0 25px rgba(212, 175, 55, 0.45);
+            animation: toastSlideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            max-width: 380px;
+            line-height: 1.4;
+        }
+
+        .gold-toast.toast-success {
+            border-color: var(--gold-bright);
+        }
+
+        .gold-toast.toast-error {
+            border-color: #ef4444;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.9), 0 0 25px rgba(239, 68, 68, 0.4);
+        }
+
+        .gold-toast-icon {
+            font-size: 18px;
+            color: var(--gold-bright);
+            flex-shrink: 0;
+        }
+
+        @keyframes toastSlideIn {
+            from { transform: translateX(100%) scale(0.9); opacity: 0; }
+            to { transform: translateX(0) scale(1); opacity: 1; }
+        }
+
+        @keyframes toastFadeOut {
+            from { transform: translateX(0) scale(1); opacity: 1; }
+            to { transform: translateX(80%) scale(0.9); opacity: 0; }
+        }
+
+        /* Mobile Responsive Adjustments */
+        @media (max-width: 768px) {
+            .navbar {
+                padding: 0 16px;
+                height: 64px;
+            }
+            .user-nav-btn {
+                padding: 7px 12px;
+                font-size: 12px;
+            }
+            .audio-toggle-btn, .lang-switch-btn {
+                padding: 7px 10px;
+                font-size: 12px;
+            }
+            .hero {
+                padding: 36px 16px 20px 16px;
+            }
+            .main-logo-img {
+                width: 90%;
+            }
+            .btn-glow-gold, .btn-glow-store {
+                padding: 12px 24px;
+                font-size: 13px;
+                width: 100%;
+                justify-content: center;
+            }
+            .status-container {
+                grid-template-columns: 1fr;
+                gap: 12px;
+                padding: 0 16px;
+            }
+            .portal-box {
+                padding: 20px;
+                border-radius: 14px;
+            }
+            #toastContainer {
+                bottom: 16px;
+                right: 16px;
+                left: 16px;
+                align-items: center;
+            }
+            .gold-toast {
+                max-width: 100%;
+                width: 100%;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .nav-socials { display: none; }
+            .navbar { justify-content: flex-end; gap: 8px; }
+        }
     </style>
 </head>
 <body>
     <canvas id="gold-canvas"></canvas>
+
+    <!-- Toast Notification Container -->
+    <div id="toastContainer"></div>
 
     <!-- Background Audio Loop -->
     <audio id="bgAudio" loop preload="auto">
@@ -1058,9 +1193,9 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
     <!-- Language Selector Modal -->
     <div class="lang-modal" id="langModal">
         <div class="lang-box">
-            <img src="/logo.png" alt="VOID" style="max-width: 170px; margin-bottom: 14px; filter: drop-shadow(0 0 20px var(--gold-glow));">
+            <img src="/logo.png" alt="VOID" style="max-width: 150px; margin-bottom: 12px; filter: drop-shadow(0 0 20px var(--gold-glow));">
             <h3>SELECT LANGUAGE</h3>
-            <p style="color: var(--text-muted); font-size: 14px; font-weight: 600;">PILIH BAHASA ANDA UNTUK MELANJUTKAN</p>
+            <p style="color: var(--text-muted); font-size: 13px; font-weight: 600;">PILIH BAHASA ANDA UNTUK MELANJUTKAN</p>
             <div class="lang-options">
                 <button class="lang-choice-btn" onclick="setLanguage('en')">
                     <img src="https://flagcdn.com/w80/gb.png" alt="English" class="choice-flag">
@@ -1122,7 +1257,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
         <div class="status-card">
             <h4 id="lblServerStatus">SERVER STATUS</h4>
             <div class="val">
-                <span id="statusDot" style="width:14px; height:14px; border-radius:50%; background:var(--online-green); box-shadow:0 0 14px var(--online-green);"></span>
+                <span id="statusDot" style="width:13px; height:13px; border-radius:50%; background:var(--online-green); box-shadow:0 0 14px var(--online-green);"></span>
                 <span id="statusText">ONLINE</span>
             </div>
         </div>
@@ -1134,7 +1269,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
 
     <!-- LOGIN / REGISTER MODAL -->
     <div class="portal-modal" id="loginModal">
-        <div class="portal-box" style="max-width: 480px;">
+        <div class="portal-box" style="max-width: 460px;">
             <div class="portal-header">
                 <h3 id="authModalHeader">PORTAL ACCESS</h3>
                 <button onclick="closeLoginModal()" style="background:transparent; border:none; color:var(--gold-bright); font-size:26px; cursor:pointer;">&times;</button>
@@ -1184,36 +1319,39 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
 
     <!-- LOGGED IN ACCOUNT / PROFILE MODAL -->
     <div class="portal-modal" id="accountModal">
-        <div class="portal-box" style="max-width: 580px;">
+        <div class="portal-box" style="max-width: 540px;">
             <div class="portal-header">
                 <h3>ACCOUNT DASHBOARD</h3>
                 <button onclick="closeAccountModal()" style="background:transparent; border:none; color:var(--gold-bright); font-size:26px; cursor:pointer;">&times;</button>
             </div>
 
             <div class="account-hero-box">
-                <div style="font-size: 12px; font-weight: 800; color: var(--gold-light); text-transform: uppercase;">LOGGED IN ACCOUNT</div>
-                <div style="font-size: 26px; font-weight: 900; color: #ffffff; margin-top: 4px;" id="accUsernameDisplay">--</div>
+                <div style="font-size: 11px; font-weight: 800; color: var(--gold-light); text-transform: uppercase; letter-spacing: 1px;">AUTHENTICATED USER</div>
+                <div style="font-size: 24px; font-weight: 900; color: #ffffff; margin-top: 4px;" id="accUsernameDisplay">--</div>
                 
-                <div style="margin-top: 18px; font-size: 13px; color: var(--gold-bright); font-weight: 700;">
-                    YOUR 4-DIGIT IN-GAME LINK CODE:
+                <!-- If NOT linked, show 4-digit code -->
+                <div id="accUnlinkedCodeBox" style="margin-top: 18px;">
+                    <div style="font-size: 12px; color: var(--gold-bright); font-weight: 700; letter-spacing: 0.5px;">
+                        YOUR 4-DIGIT IN-GAME LINK CODE:
+                    </div>
+                    <div class="unique-code-box">
+                        <div class="code-number" id="accUniqueCode">----</div>
+                        <button class="btn-copy-code" onclick="copyUniqueCode()">COPY CODE</button>
+                    </div>
+                    <p style="font-size: 12px; color: var(--text-muted); line-height: 1.5;">
+                        To link your character, open Growtopia, type <b style="color:var(--gold-bright);">/accept</b> in chat, and enter your 4-digit code.
+                    </p>
                 </div>
-                <div class="unique-code-box">
-                    <div class="code-number" id="accUniqueCode">----</div>
-                    <button class="btn-copy-code" onclick="copyUniqueCode()">COPY CODE</button>
-                </div>
-                <p style="font-size: 12px; color: var(--text-muted); line-height: 1.5;">
-                    To link your Growtopia character, type <b style="color:var(--gold-bright);">/accept</b> in-game and enter your 4-digit code.
-                </p>
             </div>
 
-            <!-- Linked GrowID status (if linked) -->
+            <!-- If LINKED, show verified character & live stats -->
             <div id="accLinkedSection" style="display:none; background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.4); border-radius: 12px; padding: 18px; margin-bottom: 20px;">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 12px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 12px; flex-wrap:wrap; gap:8px;">
                     <div>
                         <span style="font-size: 11px; font-weight: 800; color: #10b981;">LINKED GROWID</span>
-                        <h4 style="font-size: 18px; font-weight: 900; color: #fff;" id="accLinkedGrowId">--</h4>
+                        <h4 style="font-size: 19px; font-weight: 900; color: #fff;" id="accLinkedGrowId">--</h4>
                     </div>
-                    <span style="font-size: 11px; padding: 3px 8px; border-radius: 10px; background: rgba(16,185,129,0.2); border: 1px solid #10b981; color: #10b981; font-weight:800;">VERIFIED</span>
+                    <button class="btn-danger" style="padding:6px 14px; font-size:12px;" onclick="handleUnlink()">UNLINK</button>
                 </div>
                 <div class="char-stats-grid">
                     <div class="stat-badge">
@@ -1236,7 +1374,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
             </div>
 
             <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-top: 14px;">
-                <button class="btn-glow-store" style="flex:1; padding: 14px;" onclick="closeAccountModal(); openShopModal();">OPEN STORE</button>
+                <button class="btn-glow-store" style="flex:1; padding: 12px;" onclick="closeAccountModal(); openShopModal();">OPEN STORE</button>
                 <button class="btn-danger" onclick="handleLogout()">LOGOUT</button>
             </div>
         </div>
@@ -1406,7 +1544,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
                 <div class="apk-card">
                     <h5 style="color:var(--gold-bright); font-size:13px; font-weight:800; letter-spacing:1px; margin-bottom:4px;" id="apkOptional">OPTIONAL • Quick Setup with APK</h5>
                     <p style="font-size:13px; color:var(--text-muted); margin-bottom:12px;" id="apkDesc">Want to play without doing any other steps? Download .apk file and install it and you're ready to play! (Connects you directly to GTPS Cloud).</p>
-                    <button class="guide-btn" style="background:var(--gold-primary); color:#000;" onclick="alert('Downloading APK...')"><span id="btnDownloadApk">Download GTPS Cloud APK</span></button>
+                    <button class="guide-btn" style="background:var(--gold-primary); color:#000;" onclick="showToast('APK Download starting...', 'success')"><span id="btnDownloadApk">Download GTPS Cloud APK</span></button>
                 </div>
                 <div class="guide-container">
                     <div class="step-item">
@@ -1430,7 +1568,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
                             <p id="andStep3Desc">Click Copy URL and paste it into PowerTunnel.</p>
                             <div style="display:flex; gap:10px;">
                                 <button class="guide-btn" onclick="copyToClipboard('https://api.gtps.cloud/hosts/25741')">Copy URL</button>
-                                <button class="guide-btn" onclick="alert('Downloading vHost...')">Download vHost</button>
+                                <button class="guide-btn" onclick="showToast('Downloading vHost...', 'success')">Download vHost</button>
                             </div>
                         </div>
                     </div>
@@ -1530,6 +1668,32 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
         let authToken = localStorage.getItem('voidps_token') || null;
         let currentUser = null;
 
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toastContainer');
+            if (!container) return;
+
+            const toast = document.createElement('div');
+            toast.className = 'gold-toast ' + (type === 'error' ? 'toast-error' : 'toast-success');
+            
+            const icon = document.createElement('span');
+            icon.className = 'gold-toast-icon';
+            icon.innerText = type === 'error' ? '✖' : '✔';
+
+            const text = document.createElement('span');
+            text.innerText = message;
+
+            toast.appendChild(icon);
+            toast.appendChild(text);
+            container.appendChild(toast);
+
+            setTimeout(() => {
+                toast.style.animation = 'toastFadeOut 0.3s forwards';
+                setTimeout(() => {
+                    if (toast.parentNode) toast.parentNode.removeChild(toast);
+                }, 300);
+            }, 3000);
+        }
+
         function toggleAudio() {
             const audio = document.getElementById('bgAudio');
             const icon = document.getElementById('audioIcon');
@@ -1624,6 +1788,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
                     localStorage.setItem('voidps_token', authToken);
                     closeLoginModal();
                     updateNavUserState();
+                    showToast('Welcome back, ' + currentUser.username + '!', 'success');
                 } else {
                     errBox.innerText = data.error || 'Login failed';
                     errBox.style.display = 'block';
@@ -1677,6 +1842,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
                     localStorage.setItem('voidps_token', authToken);
                     closeLoginModal();
                     updateNavUserState();
+                    showToast('Account created successfully! Welcome, ' + currentUser.username, 'success');
                 } else {
                     errBox.innerText = data.error || 'Registration failed';
                     errBox.style.display = 'block';
@@ -1699,7 +1865,11 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
                 if (res.ok) {
                     const data = await res.json();
                     if (data.success) {
+                        const wasUnlinked = currentUser && !currentUser.linkedGrowId;
                         currentUser = data.user;
+                        if (wasUnlinked && currentUser.linkedGrowId) {
+                            showToast('GrowID "' + currentUser.linkedGrowId + '" linked successfully!', 'success');
+                        }
                         updateNavUserState();
                         renderAccountDashboard();
                     }
@@ -1730,9 +1900,11 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
             document.getElementById('accUniqueCode').innerText = currentUser.uniqueCode;
 
             const linkedSec = document.getElementById('accLinkedSection');
+            const unlinkedBox = document.getElementById('accUnlinkedCodeBox');
 
             if (currentUser.linkedGrowId) {
                 linkedSec.style.display = 'block';
+                unlinkedBox.style.display = 'none';
                 document.getElementById('accLinkedGrowId').innerText = currentUser.linkedGrowId;
 
                 const stats = currentUser.liveStats;
@@ -1751,13 +1923,33 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
                 }
             } else {
                 linkedSec.style.display = 'none';
+                unlinkedBox.style.display = 'block';
             }
         }
 
         function copyUniqueCode() {
             if (currentUser && currentUser.uniqueCode) {
                 navigator.clipboard.writeText(currentUser.uniqueCode);
-                alert('Copied 4-digit Link Code: ' + currentUser.uniqueCode);
+                showToast('Unique Link Code ' + currentUser.uniqueCode + ' copied to clipboard!', 'success');
+            }
+        }
+
+        async function handleUnlink() {
+            try {
+                const res = await fetch('/api/auth/unlink', {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + authToken }
+                });
+                const data = await res.json();
+                if (data.success) {
+                    currentUser.linkedGrowId = null;
+                    currentUser.liveStats = null;
+                    renderAccountDashboard();
+                    updateNavUserState();
+                    showToast('In-game account unlinked successfully.', 'success');
+                }
+            } catch (e) {
+                showToast('Failed to unlink account.', 'error');
             }
         }
 
@@ -1773,6 +1965,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
             localStorage.removeItem('voidps_token');
             closeAccountModal();
             updateNavUserState();
+            showToast('Logged out successfully.', 'success');
         }
 
         const TRANSLATIONS = {
@@ -1949,8 +2142,8 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
         function closeShopModal() { document.getElementById('shopModal').style.display = 'none'; }
 
         function contactBuy(item) {
-            const userTag = (currentUser && currentUser.linkedGrowId) ? ' (Linked Character: ' + currentUser.linkedGrowId + ')' : '';
-            alert('To purchase ' + item + userTag + ', please join our Discord or message WhatsApp staff!');
+            const userTag = (currentUser && currentUser.linkedGrowId) ? ' (Linked: ' + currentUser.linkedGrowId + ')' : '';
+            showToast('To buy ' + item + userTag + ', please contact staff on Discord / WhatsApp!', 'success');
         }
 
         function openTutorial(platform) {
@@ -1970,7 +2163,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
 
         function copyToClipboard(text) {
             navigator.clipboard.writeText(text);
-            alert('Copied to clipboard!');
+            showToast('Copied to clipboard!', 'success');
         }
 
         /* Gold Particles */
