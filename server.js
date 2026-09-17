@@ -556,7 +556,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>VOID Private Server</title>
+    <title>LIVEPS Private Server</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -1448,14 +1448,6 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
         .feature-card h3 { font-size: 16px; font-weight: 900; color: #ffffff; margin-bottom: 8px; letter-spacing: 0.5px; }
         .feature-card p { font-size: 13px; color: var(--text-muted); line-height: 1.5; margin: 0; }
 
-        /* How to Play Steps Grid */
-        .how-steps-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
-        .step-card { background: rgba(18, 15, 11, 0.75); border: 1px solid var(--gold-border); border-radius: 14px; padding: 24px 20px; backdrop-filter: blur(10px); position: relative; }
-        .step-badge { display: inline-block; background: rgba(212,175,55,0.15); border: 1px solid var(--gold-bright); color: var(--gold-bright); font-size: 11px; font-weight: 900; padding: 4px 10px; border-radius: 6px; letter-spacing: 1px; margin-bottom: 14px; }
-        .step-card h4 { font-size: 18px; font-weight: 900; color: #ffffff; margin-bottom: 8px; }
-        .step-card p { font-size: 13px; color: var(--text-muted); line-height: 1.5; margin-bottom: 14px; }
-        .step-info-box { background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 8px 12px; font-family: monospace; font-size: 12px; color: var(--gold-bright); word-break: break-all; }
-
         /* Community Cards Grid */
         .community-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 24px; }
         .community-card { background: rgba(18, 15, 11, 0.85); border: 1px solid var(--gold-border); border-radius: 16px; padding: 28px 24px; backdrop-filter: blur(10px); transition: all 0.3s ease; }
@@ -1495,7 +1487,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
     <!-- Language Selector Modal -->
     <div class="lang-modal" id="langModal">
         <div class="lang-box">
-            <img src="/logo.png" alt="VOID" style="max-width: 150px; margin-bottom: 12px; filter: drop-shadow(0 0 20px var(--gold-glow));">
+            <img src="/logo.png" alt="LIVEPS" style="max-width: 150px; margin-bottom: 12px; filter: drop-shadow(0 0 20px var(--gold-glow));">
             <h3>SELECT LANGUAGE</h3>
             <p style="color: var(--text-muted); font-size: 13px; font-weight: 600;">PILIH BAHASA ANDA UNTUK MELANJUTKAN</p>
             <div class="lang-options">
@@ -1515,8 +1507,8 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
     <nav class="navbar" id="top">
         <div style="display:flex; align-items:center; gap:24px;">
             <a href="#top" class="nav-brand">
-                <img src="/logo.png" alt="VOID" style="height:38px; filter:drop-shadow(0 0 10px var(--gold-glow));">
-                <span style="font-weight:900; letter-spacing:1.5px; color:#ffffff; font-size:16px;">VOID<span style="color:var(--gold-bright);">PS</span></span>
+                <img src="/logo.png" alt="LIVEPS" style="height:38px; filter:drop-shadow(0 0 10px var(--gold-glow));">
+                <span style="font-weight:900; letter-spacing:1.5px; color:#ffffff; font-size:16px;">LIVE<span style="color:var(--gold-bright);">PS</span></span>
             </a>
             <div class="nav-links">
                 <a href="#top" class="nav-link">HOME</a>
@@ -1529,12 +1521,12 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
 
         <div style="display:flex; align-items:center; gap:12px;">
             <div class="nav-socials">
-                <a href="https://discord.gg/voidps" target="_blank" class="social-btn discord" title="Join Discord">
+                <a href="https://discord.gg/liveps" target="_blank" class="social-btn discord" title="Join Discord">
                     <svg viewBox="0 0 127.14 96.36">
                         <path d="M107.7,8.07A105.15,105.15,0,0,0,81.47,0a72.06,72.06,0,0,0-3.36,6.83A97.68,97.68,0,0,0,49,6.83,72.37,72.37,0,0,0,45.64,0,105.89,105.89,0,0,0,19.39,8.09C2.79,32.65-1.71,56.6.54,80.21h0A105.73,105.73,0,0,0,32.71,96.36,77.7,77.7,0,0,0,39.6,85.25a68.42,68.42,0,0,1-10.85-5.18c.91-.66,1.8-1.34,2.66-2a75.57,75.57,0,0,0,64.32,0c.87.71,1.76,1.39,2.66,2a68.68,68.68,0,0,1-10.87,5.19,77,77,0,0,0,6.89,11.1A105.25,105.25,0,0,0,126.6,80.22h0C129.24,52.84,122.09,29.11,107.7,8.07ZM42.45,65.69C36.18,65.69,31,60,31,53s5-12.74,11.43-12.74S54,45.91,53.89,53,48.84,65.69,42.45,65.69Zm42.24,0C78.41,65.69,73.25,60,73.25,53s5-12.74,11.44-12.74S96.23,45.91,96.12,53,91.08,65.69,84.69,65.69Z"/>
                     </svg>
                 </a>
-                <a href="https://chat.whatsapp.com/invite/voidps" target="_blank" class="social-btn whatsapp" title="WhatsApp Group">
+                <a href="https://chat.whatsapp.com/invite/liveps" target="_blank" class="social-btn whatsapp" title="WhatsApp Group">
                     <svg viewBox="0 0 448 512">
                         <path d="M380.9 97.1C339 55.1 283.2 32 223.9 32c-122.4 0-222 99.6-222 222 0 39.1 10.2 77.3 29.6 111L0 480l117.7-30.9c32.4 17.7 68.9 27 106.1 27h.1c122.3 0 224.1-99.6 224.1-222 0-59.3-25.2-115-67.1-157zm-157 341.6c-33.2 0-65.7-8.9-94-25.7l-6.7-4-69.8 18.3L72 359.2l-4.4-7c-18.5-29.4-28.2-63.3-28.2-98.2 0-101.7 82.8-184.5 184.6-184.5 49.3 0 95.6 19.2 130.4 54.1 34.8 34.9 56.2 81.2 56.1 130.5 0 101.8-84.9 184.6-186.6 184.6zm101.2-138.2c-5.5-2.8-32.8-16.2-37.9-18-5.1-1.9-8.8-2.8-12.5 2.8-3.7 5.6-14.3 18-17.6 21.8-3.2 3.7-6.5 4.2-12 1.4-32.6-16.3-54-29.1-75.5-66-5.7-9.8 5.7-9.1 16.3-30.3 1.8-3.7.9-6.9-.5-9.7-1.4-2.8-12.5-30.1-17.1-41.2-4.5-10.8-9.1-9.3-12.5-9.5-3.2-.2-6.9-.2-10.6-.2-3.7 0-9.7 1.4-14.8 6.9-5.1 5.6-19.4 19-19.4 46.3 0 27.3 19.9 53.7 22.6 57.4 2.8 3.7 39.1 59.7 94.8 83.8 35.2 15.2 49 16.5 66.6 13.9 10.7-1.6 32.8-13.4 37.4-26.4 4.6-13 4.6-24.1 3.2-26.4-1.3-2.5-5-3.9-10.5-6.6z"/>
                     </svg>
@@ -1556,7 +1548,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
 
     <!-- Hero -->
     <section class="hero">
-        <img src="/logo.png" alt="VOID Private Server" class="main-logo-img">
+        <img src="/logo.png" alt="LIVEPS Private Server" class="main-logo-img">
         <p id="heroDesc">Connect to the fastest, zero-lag GTPS Cloud server. Join thousands of champions, conquer custom bosses, and trade in our rich economy.</p>
         
         <div class="hero-action-buttons">
@@ -1591,30 +1583,45 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
     <!-- ABOUT SECTION -->
     <section class="page-section" id="aboutSection">
         <div class="section-header">
-            <div class="section-tag">DISCOVER VOIDPS</div>
-            <h2 class="section-title">THE ULTIMATE GTPS EXPERIENCE</h2>
-            <p class="section-subtitle">Engineered on dedicated GTPS Cloud architecture with zero-lag network routing, pure player-driven economy, and full cross-platform connectivity.</p>
+            <div class="section-tag">ABOUT OUR SERVER</div>
+            <h2 class="section-title">WHY PLAY ON LIVEPS?</h2>
+            <p class="section-subtitle">Explore what makes LIVEPS the most exciting, stable, and feature-rich server in the community.</p>
         </div>
         <div class="features-grid">
             <div class="feature-card">
-                <div class="feature-icon" style="color:#3b82f6;">⚡</div>
-                <h3>ZERO-LAG CORE</h3>
-                <p>Hosted on high-speed GTPS Cloud infrastructure. Experience smooth block placement, zero rollback, and instant responsive actions.</p>
+                <div class="feature-icon" style="color:#f59e0b;">🎮</div>
+                <h3>Cool Features</h3>
+                <p>Unique gameplay mechanics including surgery, cooking, fishing, ship building, and challenging parkour worlds.</p>
             </div>
             <div class="feature-card">
-                <div class="feature-icon" style="color:#00f0ff;">💎</div>
-                <h3>REAL BGL ECONOMY</h3>
-                <p>Real Blue Gem Lock (Item 7188) balance system synced live between your in-game backpack and website dashboard.</p>
+                <div class="feature-icon" style="color:#10b981;">⚡</div>
+                <h3>24/7 Uptime</h3>
+                <p>Reliable server hosting with minimal downtime, so you can play whenever you want without interruption.</p>
             </div>
             <div class="feature-card">
-                <div class="feature-icon" style="color:#ffd700;">👑</div>
-                <h3>EXCLUSIVE ROLES</h3>
-                <p>Climb from VIP up to Developer tier. Unlock customized titles, unique chat tags, and privileged server capabilities.</p>
+                <div class="feature-icon" style="color:#5865F2;">💬</div>
+                <h3>Discord Integration</h3>
+                <p>Seamless integration with our Discord server for community events, support, and staying connected.</p>
             </div>
             <div class="feature-card">
-                <div class="feature-icon" style="color:#10b981;">🛡️</div>
-                <h3>SECURE &amp; FAIR</h3>
-                <p>Integrated security filters, active moderator surveillance, and unique link codes safeguard your identity and assets.</p>
+                <div class="feature-icon" style="color:#ec4899;">🎁</div>
+                <h3>Regular Events</h3>
+                <p>Participate in exciting server-wide events with exclusive rewards and prizes for the community.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon" style="color:#3b82f6;">🤝</div>
+                <h3>Player Support</h3>
+                <p>Dedicated support team ready to help with any issues or questions through our Discord community.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon" style="color:#14b8a6;">🛡️</div>
+                <h3>Safe Environment</h3>
+                <p>Strong moderation with zero-tolerance policy for disruptions, ensuring a safe gaming experience for all players.</p>
+            </div>
+            <div class="feature-card" style="grid-column: 1 / -1;">
+                <div class="feature-icon" style="color:#a855f7;">👥</div>
+                <h3>Active Community</h3>
+                <p>Join over 22,000 members in our thriving community where creativity and collaboration come to life.</p>
             </div>
         </div>
     </section>
@@ -1622,35 +1629,23 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
     <!-- HOW TO PLAY SECTION -->
     <section class="page-section" id="howToPlaySection">
         <div class="section-header">
-            <div class="section-tag">QUICK CONNECT</div>
+            <div class="section-tag">CONNECTION GUIDE</div>
             <h2 class="section-title">HOW TO CONNECT &amp; PLAY</h2>
-            <p class="section-subtitle">Get connected in less than 2 minutes on Android, Windows, iOS, or macOS.</p>
+            <p class="section-subtitle">Select your device platform below to open the complete step-by-step setup tutorial.</p>
         </div>
-        <div class="how-steps-grid">
-            <div class="step-card">
-                <div class="step-badge">STEP 1</div>
-                <h4>CONFIGURE HOSTS</h4>
-                <p>Use PowerTunnel (Android), Surge 5 (iOS), or edit your hosts file (PC/Mac) with our cloud server routing.</p>
-                <div class="step-info-box">IP: 5.39.13.16 &bull; Port: 25741</div>
-            </div>
-            <div class="step-card">
-                <div class="step-badge">STEP 2</div>
-                <h4>START GROWTOPIA</h4>
-                <p>Launch Growtopia and click Play. You will be connected straight to VOIDPS with zero complicated downloads.</p>
-                <div class="step-info-box">URL: api.gtps.cloud/hosts/25741</div>
-            </div>
-            <div class="step-card">
-                <div class="step-badge">STEP 3</div>
-                <h4>LINK CHARACTER</h4>
-                <p>Register on this website, view your 4-digit code, and type <b>/link &lt;code&gt;</b> in-game to link your balance!</p>
-                <div class="step-info-box">In-game command: /link &lt;code&gt;</div>
-            </div>
-        </div>
-        <div style="text-align:center; margin-top:32px; display:flex; justify-content:center; gap:14px; flex-wrap:wrap;">
-            <button class="btn-glow-gold" onclick="openTutorial('windows')">WINDOWS TUTORIAL</button>
-            <button class="btn-glow-gold" onclick="openTutorial('android')">ANDROID TUTORIAL</button>
-            <button class="btn-glow-gold" onclick="openTutorial('ios')">IOS TUTORIAL</button>
-            <button class="btn-glow-gold" onclick="openTutorial('macos')">MAC TUTORIAL</button>
+        <div style="text-align:center; display:flex; justify-content:center; gap:16px; flex-wrap:wrap; margin-top:10px;">
+            <button class="btn-glow-gold" style="padding:16px 28px; font-size:14px; display:inline-flex; align-items:center; gap:8px;" onclick="openTutorial('windows')">
+                <span>🪟</span> <span>WINDOWS GUIDE</span>
+            </button>
+            <button class="btn-glow-gold" style="padding:16px 28px; font-size:14px; display:inline-flex; align-items:center; gap:8px;" onclick="openTutorial('android')">
+                <span>🤖</span> <span>ANDROID GUIDE</span>
+            </button>
+            <button class="btn-glow-gold" style="padding:16px 28px; font-size:14px; display:inline-flex; align-items:center; gap:8px;" onclick="openTutorial('ios')">
+                <span>🍎</span> <span>IOS GUIDE</span>
+            </button>
+            <button class="btn-glow-gold" style="padding:16px 28px; font-size:14px; display:inline-flex; align-items:center; gap:8px;" onclick="openTutorial('macos')">
+                <span>💻</span> <span>MAC GUIDE</span>
+            </button>
         </div>
     </section>
 
@@ -1669,11 +1664,11 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
                     </div>
                     <div>
                         <h3 style="color:#ffffff; font-size:18px; font-weight:900; margin:0;">DISCORD SERVER</h3>
-                        <div style="font-size:12px; color:#5865F2; font-weight:700; margin-top:2px;">discord.gg/voidps</div>
+                        <div style="font-size:12px; color:#5865F2; font-weight:700; margin-top:2px;">discord.gg/liveps</div>
                     </div>
                 </div>
                 <p style="color:var(--text-muted); font-size:13px; line-height:1.5; margin-bottom:20px;">Daily giveaways, trade channels, server status announcements, and 24/7 staff ticket support.</p>
-                <a href="https://discord.gg/voidps" target="_blank" class="btn-comm" style="background:#5865F2; color:#ffffff;">JOIN OFFICIAL DISCORD</a>
+                <a href="https://discord.gg/liveps" target="_blank" class="btn-comm" style="background:#5865F2; color:#ffffff;">JOIN OFFICIAL DISCORD</a>
             </div>
 
             <div class="community-card whatsapp-card">
@@ -1683,11 +1678,11 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
                     </div>
                     <div>
                         <h3 style="color:#ffffff; font-size:18px; font-weight:900; margin:0;">WHATSAPP GROUP</h3>
-                        <div style="font-size:12px; color:#25D366; font-weight:700; margin-top:2px;">chat.whatsapp.com/voidps</div>
+                        <div style="font-size:12px; color:#25D366; font-weight:700; margin-top:2px;">chat.whatsapp.com/liveps</div>
                     </div>
                 </div>
                 <p style="color:var(--text-muted); font-size:13px; line-height:1.5; margin-bottom:20px;">Instant server alerts, maintenance schedules, event notifications, and direct player chat.</p>
-                <a href="https://chat.whatsapp.com/invite/voidps" target="_blank" class="btn-comm" style="background:#25D366; color:#000000;">JOIN WHATSAPP COMMUNITY</a>
+                <a href="https://chat.whatsapp.com/invite/liveps" target="_blank" class="btn-comm" style="background:#25D366; color:#000000;">JOIN WHATSAPP COMMUNITY</a>
             </div>
         </div>
     </section>
@@ -1695,10 +1690,10 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
     <!-- SITE FOOTER -->
     <footer class="site-footer">
         <div style="display:flex; justify-content:center; align-items:center; gap:10px; margin-bottom:12px;">
-            <img src="/logo.png" alt="VOIDPS" style="height:26px;">
-            <span style="font-weight:900; color:#fff; letter-spacing:1px;">VOIDPS &bull; GTPS CLOUD</span>
+            <img src="/logo.png" alt="LIVEPS" style="height:26px;">
+            <span style="font-weight:900; color:#fff; letter-spacing:1px;">LIVEPS &bull; GTPS CLOUD</span>
         </div>
-        <p style="margin:0; font-size:12px; color:var(--text-muted);">&copy; 2026 VOIDPS. All rights reserved. Not affiliated with Ubisoft or Growtopia.</p>
+        <p style="margin:0; font-size:12px; color:var(--text-muted);">&copy; 2026 LIVEPS. All rights reserved. Not affiliated with Ubisoft or Growtopia.</p>
     </footer>
 
     <!-- LOGIN / REGISTER MODAL -->
@@ -1832,7 +1827,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
     <div class="portal-modal" id="shopModal">
         <div class="portal-box">
             <div class="portal-header">
-                <h3 id="shopModalTitle">VOID STORE • ROLES &amp; RANKS</h3>
+                <h3 id="shopModalTitle">LIVEPS STORE • ROLES &amp; RANKS</h3>
                 <button onclick="closeShopModal()" style="background:transparent; border:none; color:var(--gold-bright); font-size:26px; cursor:pointer;">&times;</button>
             </div>
 
@@ -1936,7 +1931,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
     <div class="portal-modal" id="tutorialModal">
         <div class="portal-box">
             <div class="portal-header">
-                <h3 id="tutorialModalTitle">HOW TO PLAY ON VOIDPS</h3>
+                <h3 id="tutorialModalTitle">HOW TO PLAY ON LIVEPS</h3>
                 <button onclick="closeTutorial()" style="background:transparent; border:none; color:var(--gold-bright); font-size:26px; cursor:pointer;">&times;</button>
             </div>
 
@@ -2107,9 +2102,9 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
     </div>
 
     <script>
-        let currentLang = localStorage.getItem('voidps_lang') || 'en';
+        let currentLang = localStorage.getItem('liveps_lang') || 'en';
         let audioPlaying = false;
-        let authToken = localStorage.getItem('voidps_token') || null;
+        let authToken = localStorage.getItem('liveps_token') || null;
         let currentUser = null;
 
         function showToast(message, type = 'success') {
@@ -2229,7 +2224,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
                 if (data.success) {
                     authToken = data.token;
                     currentUser = data.user;
-                    localStorage.setItem('voidps_token', authToken);
+                    localStorage.setItem('liveps_token', authToken);
                     closeLoginModal();
                     updateNavUserState();
                     renderAccountDashboard();
@@ -2284,7 +2279,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
                 if (data.success) {
                     authToken = data.token;
                     currentUser = data.user;
-                    localStorage.setItem('voidps_token', authToken);
+                    localStorage.setItem('liveps_token', authToken);
                     closeLoginModal();
                     updateNavUserState();
                     renderAccountDashboard();
@@ -2322,7 +2317,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
                 } else if (res.status === 401) {
                     currentUser = null;
                     authToken = null;
-                    localStorage.removeItem('voidps_token');
+                    localStorage.removeItem('liveps_token');
                     updateNavUserState();
                 }
             } catch (e) {
@@ -2431,7 +2426,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
             } catch (e) {}
             currentUser = null;
             authToken = null;
-            localStorage.removeItem('voidps_token');
+            localStorage.removeItem('liveps_token');
             closeAccountModal();
             updateNavUserState();
             showToast('Logged out successfully.', 'success');
@@ -2446,8 +2441,8 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
                 btnStore: 'SHOP ASSETS',
                 lblStatus: 'SERVER STATUS',
                 lblOnline: 'ONLINE PLAYERS',
-                modalTitle: 'HOW TO PLAY ON VOIDPS',
-                shopTitle: 'VOID STORE • ROLES & RANKS',
+                modalTitle: 'HOW TO PLAY ON LIVEPS',
+                shopTitle: 'LIVEPS STORE • ROLES & RANKS',
                 winStep1T: 'Run Notepad as Administrator',
                 winStep1D: 'Right-click Notepad and choose "Run as Administrator".',
                 winStep2T: 'Open hosts file',
@@ -2494,8 +2489,8 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
                 btnStore: 'BELI ITEM & ROLE',
                 lblStatus: 'STATUS SERVER',
                 lblOnline: 'PEMAIN ONLINE',
-                modalTitle: 'CARA BERMAIN DI VOIDPS',
-                shopTitle: 'TOKO VOIDPS • KATALOG ROLE',
+                modalTitle: 'CARA BERMAIN DI LIVEPS',
+                shopTitle: 'TOKO LIVEPS • KATALOG ROLE',
                 winStep1T: 'Buka Notepad sebagai Administrator',
                 winStep1D: 'Klik kanan Notepad lalu pilih "Run as Administrator".',
                 winStep2T: 'Buka file hosts',
@@ -2538,7 +2533,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
 
         function setLanguage(lang) {
             currentLang = lang;
-            localStorage.setItem('voidps_lang', lang);
+            localStorage.setItem('liveps_lang', lang);
             document.getElementById('langModal').style.display = 'none';
             applyTranslations();
             if (!audioPlaying) toggleAudio();
@@ -2602,7 +2597,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
             document.getElementById('macStep4Desc').innerText = t.macStep4D;
         }
 
-        if (localStorage.getItem('voidps_lang')) {
+        if (localStorage.getItem('liveps_lang')) {
             document.getElementById('langModal').style.display = 'none';
         }
         applyTranslations();
@@ -2832,5 +2827,5 @@ app.get('/', (req, res) => {
 });
 
 app.listen(PORT, () => {
-    console.log(`VOIDPS Portal running on port ${PORT}`);
+    console.log(`LIVEPS Portal running on port ${PORT}`);
 });
