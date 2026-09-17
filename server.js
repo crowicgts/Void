@@ -61,10 +61,10 @@ function generateUniqueCode() {
 }
 
 let serverData = {
-    status: "ONLINE",
-    lastHeartbeat: Date.now(),
+    status: "OFFLINE",
+    lastHeartbeat: 0,
     port: GTPS_PORT,
-    playerCount: 1,
+    playerCount: 0,
     players: [],
     logs: []
 };
@@ -159,8 +159,8 @@ async function pollGTPSCloud() {
                 try {
                     const data = JSON.parse(text);
                     serverData.port = data.port || GTPS_PORT;
-                    serverData.playerCount = data.playerCount || (data.players ? data.players.length : serverData.playerCount);
-                    serverData.players = data.players || serverData.players;
+                    serverData.playerCount = typeof data.playerCount === 'number' ? data.playerCount : (data.players ? data.players.length : 0);
+                    serverData.players = Array.isArray(data.players) ? data.players : [];
                     serverData.logs = data.logs || serverData.logs;
 
                     if (data.pendingLinks && Array.isArray(data.pendingLinks) && data.pendingLinks.length > 0) {
@@ -172,13 +172,17 @@ async function pollGTPSCloud() {
                 }
             }
         } else {
-            if (Date.now() - serverData.lastHeartbeat > 15000) {
+            if (serverData.lastHeartbeat > 0 && Date.now() - serverData.lastHeartbeat > 15000) {
                 serverData.status = "OFFLINE";
+                serverData.playerCount = 0;
+                serverData.players = [];
             }
         }
     } catch (err) {
-        if (Date.now() - serverData.lastHeartbeat > 15000) {
+        if (serverData.lastHeartbeat > 0 && Date.now() - serverData.lastHeartbeat > 15000) {
             serverData.status = "OFFLINE";
+            serverData.playerCount = 0;
+            serverData.players = [];
         }
     }
 }
