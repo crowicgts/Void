@@ -97,15 +97,21 @@ function processPendingLinks(pendingList) {
 
 let pendingActions = [];
 
+function normalizeName(name) {
+    if (!name) return '';
+    return String(name).replace(/`./g, '').replace(/`/g, '').trim().toLowerCase();
+}
+
 function syncBGLFromPlayers(players) {
     if (!Array.isArray(players)) return;
     let modified = false;
     for (const p of players) {
         if (!p || !p.name) continue;
-        const linked = db.users.find(u => u.linkedGrowId && u.linkedGrowId.toLowerCase() === p.name.toLowerCase());
+        const pNorm = normalizeName(p.name);
+        const linked = db.users.find(u => u.linkedGrowId && normalizeName(u.linkedGrowId) === pNorm);
         if (linked) {
             const newBgl = Number(p.bgl) || 0;
-            console.log(`[BGL-SYNC] ${p.name} bgl=${p.bgl} → parsed=${newBgl}, current=${linked.bglBalance}`);
+            console.log(`[BGL-SYNC] ${p.name} (norm: ${pNorm}) bgl=${p.bgl} parsed=${newBgl}, prev=${linked.bglBalance}`);
             if (linked.bglBalance !== newBgl) {
                 linked.bglBalance = newBgl;
                 modified = true;
@@ -359,7 +365,8 @@ app.get('/api/auth/me', (req, res) => {
     let liveStats = null;
     let liveBgl = user.bglBalance || 0;
     if (user.linkedGrowId && serverData.players && Array.isArray(serverData.players)) {
-        const p = serverData.players.find(x => (x.name || '').toLowerCase() === user.linkedGrowId.toLowerCase());
+        const userNorm = normalizeName(user.linkedGrowId);
+        const p = serverData.players.find(x => normalizeName(x.name) === userNorm);
         if (p) {
             liveBgl = Number(p.bgl) || 0;
             if (user.bglBalance !== liveBgl) {
@@ -1577,6 +1584,10 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
                         <div class="lbl">WORLD LOCKS</div>
                         <div class="val" id="accLiveWL" style="color:var(--gold-bright);">0</div>
                     </div>
+                    <div class="stat-badge">
+                        <div class="lbl">BLUE GEM LOCKS</div>
+                        <div class="val" id="accLiveBGL" style="color:var(--gold-bright);">0</div>
+                    </div>
                 </div>
             </div>
 
@@ -2096,13 +2107,23 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
                     document.getElementById('accLiveWorld').innerText = stats.world || 'EXIT';
                     document.getElementById('accLiveGems').innerText = (stats.gems || 0).toLocaleString();
                     document.getElementById('accLiveWL').innerText = (stats.wl || 0).toLocaleString();
+                    const bglVal = typeof stats.bgl === 'number' ? stats.bgl : (currentUser.bglBalance || 0);
+                    if (document.getElementById('accLiveBGL')) {
+                        document.getElementById('accLiveBGL').innerText = bglVal.toLocaleString();
+                    }
                 } else {
                     document.getElementById('accLiveStatus').innerText = 'OFFLINE';
                     document.getElementById('accLiveStatus').style.color = '#ef4444';
                     document.getElementById('accLiveWorld').innerText = 'OFFLINE';
                     document.getElementById('accLiveGems').innerText = stats ? (stats.gems || 0).toLocaleString() : '0';
                     document.getElementById('accLiveWL').innerText = stats ? (stats.wl || 0).toLocaleString() : '0';
+                    const bglVal = stats && typeof stats.bgl === 'number' ? stats.bgl : (currentUser.bglBalance || 0);
+                    if (document.getElementById('accLiveBGL')) {
+                        document.getElementById('accLiveBGL').innerText = bglVal.toLocaleString();
+                    }
                 }
+                updateAccBalance();
+                updateShopBalance();
             } else {
                 linkedSec.style.display = 'none';
                 unlinkedBox.style.display = 'block';
@@ -2353,14 +2374,22 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
             }
         }
 
+        function getEffectiveBGL() {
+            if (!currentUser) return 0;
+            if (currentUser.liveStats && typeof currentUser.liveStats.bgl === 'number') {
+                return currentUser.liveStats.bgl;
+            }
+            return currentUser.bglBalance || 0;
+        }
+
         function updateShopBalance() {
             const el = document.getElementById('shopBglBalance');
-            if (el && currentUser) el.innerText = (currentUser.bglBalance || 0).toLocaleString();
+            if (el && currentUser) el.innerText = getEffectiveBGL().toLocaleString();
         }
 
         function updateAccBalance() {
             const el = document.getElementById('accBglBalance');
-            if (el && currentUser) el.innerText = (currentUser.bglBalance || 0).toLocaleString();
+            if (el && currentUser) el.innerText = getEffectiveBGL().toLocaleString();
         }
 
         function openTutorial(platform) {
