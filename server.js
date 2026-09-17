@@ -7,7 +7,8 @@ const crypto = require('crypto');
 const app = express();
 const PORT = process.env.PORT || 3000;
 const GTPS_PORT = process.env.GTPS_PORT || 25741;
-const GTPS_CLOUD_API = `https://api.gtps.cloud/g-api/${GTPS_PORT}/status`;
+const GTPS_CLOUD_API = `https://api.gtps.cloud/g-api/${GTPS_PORT}/sync-from-web`;
+const GTPS_CLOUD_STATUS_API = `https://api.gtps.cloud/g-api/${GTPS_PORT}/status`;
 
 app.use(cors());
 app.use(express.json());
@@ -86,7 +87,7 @@ function processPendingLinks(pendingList) {
             });
             user.linkedGrowId = cleanGrowId;
             modified = true;
-            console.log(`[SYNCED VIA GATEWAY] Linked GrowID "${cleanGrowId}" to website user "${user.username}" (Code: ${cleanCode})`);
+            console.log(`[LINK SYNCED] Linked GrowID "${cleanGrowId}" to website user "${user.username}" (Code: ${cleanCode})`);
         }
     }
     if (modified) {
@@ -110,19 +111,34 @@ app.post('/api/sync', (req, res) => {
         processPendingLinks(data.pendingLinks);
     }
 
-    return res.json({ success: true });
+    const publicUsers = db.users.map(u => ({ username: u.username, code: u.uniqueCode, linkedGrowId: u.linkedGrowId }));
+    return res.json({ success: true, users: publicUsers });
 });
 
-// Periodic polling from GTPS Cloud Gateway
+// Periodic bidirectional polling to GTPS Cloud Gateway
 async function pollGTPSCloud() {
     try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 4000);
+        const timeoutId = setTimeout(() => controller.abort(), 3500);
 
-        const response = await fetch(GTPS_CLOUD_API, { signal: controller.signal });
+        const publicUsers = db.users.map(u => ({ username: u.username, code: u.uniqueCode, linkedGrowId: u.linkedGrowId }));
+        const pushPayload = JSON.stringify({ users: publicUsers });
+
+        let response = null;
+        try {
+            response = await fetch(GTPS_CLOUD_API, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: pushPayload,
+                signal: controller.signal
+            });
+        } catch (e) {
+            response = await fetch(GTPS_CLOUD_STATUS_API, { signal: controller.signal });
+        }
+
         clearTimeout(timeoutId);
 
-        if (response.ok) {
+        if (response && response.ok) {
             serverData.status = "ONLINE";
             serverData.lastHeartbeat = Date.now();
 
@@ -152,7 +168,7 @@ async function pollGTPSCloud() {
     }
 }
 
-setInterval(pollGTPSCloud, 2000);
+setInterval(pollGTPSCloud, 1800);
 pollGTPSCloud();
 
 app.get('/api/status', (req, res) => {
@@ -204,6 +220,8 @@ app.post('/api/auth/register', (req, res) => {
     const token = crypto.randomBytes(24).toString('hex');
     db.sessions[token] = newUser.id;
     saveDatabase(db);
+
+    pollGTPSCloud();
 
     return res.json({
         success: true,
@@ -305,11 +323,12 @@ app.post('/api/auth/unlink', (req, res) => {
 
     user.linkedGrowId = null;
     saveDatabase(db);
+    pollGTPSCloud();
 
     return res.json({ success: true, message: 'Account unlinked successfully.' });
 });
 
-// Direct In-Game /accept & /link Verification Endpoint
+// Direct In-Game /link & /accept Verification Endpoint
 app.post('/api/link-verify', (req, res) => {
     const { growId, code } = req.body || {};
 
@@ -1572,7 +1591,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
                         <div class="step-num">3</div>
                         <div class="step-content">
                             <h4 id="winStep3Title">Add entries</h4>
-                            <p id="winStep3Desc">Click Copy Hosts, paste the two lines at the bottom of the file, then Save (Ctrl + S).</p>
+                            <p id="winStep3Desc">Click Copy Hosts, paste the two lines at the bottom of the file, then Save (Ctrl + S). </p>
                             <button class="guide-btn" onclick="copyToClipboard('5.39.13.16 growtopia1.com\\n5.39.13.16 growtopia2.com')"><span id="btnCopyHosts">Copy Hosts</span></button>
                         </div>
                     </div>
