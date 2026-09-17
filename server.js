@@ -21,10 +21,28 @@ let serverData = {
     logs: []
 };
 
+let pendingLinks = {};
+let verifiedSessions = {};
+
+// Direct inbound push from GTPS Lua
+app.post('/api/sync', (req, res) => {
+    const data = req.body || {};
+    serverData = {
+        status: "ONLINE",
+        lastHeartbeat: Date.now(),
+        port: data.port || GTPS_PORT,
+        playerCount: data.playerCount || (data.players ? data.players.length : 0),
+        players: data.players || [],
+        logs: data.logs || serverData.logs || []
+    };
+    return res.json({ success: true, pendingLinks: Object.values(pendingLinks).filter(p => p.status === 'PENDING') });
+});
+
+// Periodic fallback polling from GTPS Cloud Gateway
 async function pollGTPSCloud() {
     try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 4000);
+        const timeoutId = setTimeout(() => controller.abort(), 3500);
 
         const response = await fetch(GTPS_CLOUD_API, { signal: controller.signal });
         clearTimeout(timeoutId);
@@ -37,13 +55,17 @@ async function pollGTPSCloud() {
                 port: data.port || GTPS_PORT,
                 playerCount: data.playerCount || (data.players ? data.players.length : 0),
                 players: data.players || [],
-                logs: data.logs || []
+                logs: data.logs || serverData.logs || []
             };
         } else {
-            serverData.status = "OFFLINE";
+            if (Date.now() - serverData.lastHeartbeat > 8000) {
+                serverData.status = "OFFLINE";
+            }
         }
     } catch (err) {
-        serverData.status = "OFFLINE";
+        if (Date.now() - serverData.lastHeartbeat > 8000) {
+            serverData.status = "OFFLINE";
+        }
     }
 }
 
@@ -52,6 +74,70 @@ pollGTPSCloud();
 
 app.get('/api/status', (req, res) => {
     res.json(serverData);
+});
+
+// Web Account Link Request
+app.post('/api/link-request', (req, res) => {
+    const { growId } = req.body;
+    if (!growId || growId.trim() === '') {
+        return res.status(400).json({ error: 'Please enter a valid in-game name' });
+    }
+
+    const cleanName = growId.trim();
+    const code = Math.floor(1000 + Math.random() * 9000).toString();
+    const requestId = 'REQ-' + Date.now();
+
+    pendingLinks[requestId] = {
+        id: requestId,
+        growId: cleanName,
+        code: code,
+        status: 'PENDING',
+        createdAt: Date.now()
+    };
+
+    return res.json({ success: true, requestId, code, growId: cleanName });
+});
+
+// Check if in-game accepted the link
+app.get('/api/link-status/:requestId', (req, res) => {
+    const { requestId } = req.params;
+    const item = pendingLinks[requestId];
+    if (!item) {
+        return res.json({ status: 'EXPIRED' });
+    }
+    return res.json({ status: item.status, growId: item.growId });
+});
+
+// Endpoint called by in-game Lua to verify
+app.post('/api/link-verify', (req, res) => {
+    const { requestId, code, action } = req.body;
+    const item = pendingLinks[requestId];
+    if (!item) {
+        return res.status(404).json({ error: 'Request not found' });
+    }
+
+    if (action === 'ACCEPT' && item.code === code) {
+        item.status = 'VERIFIED';
+        verifiedSessions[item.growId] = {
+            growId: item.growId,
+            verifiedAt: Date.now()
+        };
+        return res.json({ success: true, message: 'Account verified successfully!' });
+    } else {
+        item.status = 'REJECTED';
+        return res.json({ success: true, message: 'Request rejected' });
+    }
+});
+
+// Public pending list for in-game Lua /accept
+app.get('/api/pending-links/:growId', (req, res) => {
+    const targetName = req.params.growId.toLowerCase();
+    const matches = Object.values(pendingLinks).filter(p => 
+        p.status === 'PENDING' && 
+        p.growId.toLowerCase() === targetName &&
+        (Date.now() - p.createdAt < 300000)
+    );
+    return res.json({ requests: matches });
 });
 
 app.get('/logo.png', (req, res) => {
@@ -108,7 +194,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
             z-index: 0;
         }
 
-        /* Top Navigation */
+        /* Navbar */
         .navbar {
             position: relative;
             z-index: 10;
@@ -151,16 +237,33 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
         .social-btn.discord:hover { background: var(--discord-color); border-color: var(--discord-color); }
         .social-btn.whatsapp:hover { background: var(--whatsapp-color); border-color: var(--whatsapp-color); }
 
-        .social-btn svg {
-            width: 22px;
-            height: 22px;
-            fill: currentColor;
-        }
+        .social-btn svg { width: 22px; height: 22px; fill: currentColor; }
 
         .nav-controls {
             display: flex;
             align-items: center;
             gap: 12px;
+        }
+
+        .auth-status-btn {
+            background: rgba(212, 175, 55, 0.2);
+            border: 1px solid var(--gold-border);
+            color: var(--gold-bright);
+            padding: 9px 18px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 800;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.2s ease;
+        }
+
+        .auth-status-btn:hover {
+            background: var(--gold-primary);
+            color: #000;
+            box-shadow: 0 0 20px var(--gold-glow);
         }
 
         .audio-toggle-btn {
@@ -204,14 +307,9 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
             transform: translateY(-2px);
         }
 
-        .flag-img {
-            width: 22px;
-            height: 15px;
-            border-radius: 2px;
-            object-fit: cover;
-        }
+        .flag-img { width: 22px; height: 15px; border-radius: 2px; object-fit: cover; }
 
-        /* Hero Section */
+        /* Hero */
         .hero {
             position: relative;
             z-index: 1;
@@ -354,7 +452,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
             gap: 12px;
         }
 
-        /* Modal Structure */
+        /* Modals */
         .portal-modal {
             position: fixed;
             top: 0; left: 0; width: 100vw; height: 100vh;
@@ -371,7 +469,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
             background: #0f0d0a;
             border: 2px solid var(--gold-primary);
             border-radius: 18px;
-            width: 880px;
+            width: 920px;
             max-width: 100%;
             max-height: 90vh;
             overflow-y: auto;
@@ -401,44 +499,10 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
             letter-spacing: 1px;
         }
 
-        .platform-tabs {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 24px;
-            flex-wrap: wrap;
-        }
-
-        .plat-btn {
-            background: rgba(22, 18, 12, 0.85);
-            border: 1px solid var(--gold-border);
-            color: var(--text-muted);
-            padding: 10px 22px;
-            border-radius: 8px;
-            font-weight: 800;
-            font-size: 14px;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .plat-btn:hover {
-            color: white;
-            border-color: var(--gold-bright);
-        }
-
-        .plat-btn.active {
-            background: linear-gradient(135deg, #b45309, #d4af37);
-            border-color: var(--gold-bright);
-            color: #000000;
-            box-shadow: 0 0 25px var(--gold-glow);
-        }
-
         /* Shop Grid */
         .shop-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
             gap: 20px;
         }
 
@@ -475,10 +539,10 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
         }
 
         .shop-card h4 {
-            font-size: 20px;
+            font-size: 19px;
             font-weight: 900;
             color: #ffffff;
-            margin-bottom: 8px;
+            margin-bottom: 6px;
         }
 
         .shop-card .price {
@@ -529,7 +593,75 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
             filter: brightness(1.1);
         }
 
-        /* Step Card */
+        /* In-Game Sync Dialog */
+        .auth-input {
+            width: 100%;
+            background: #050403;
+            border: 1px solid var(--gold-border);
+            padding: 14px;
+            border-radius: 8px;
+            color: #ffffff;
+            font-size: 16px;
+            font-weight: 700;
+            margin-bottom: 14px;
+            outline: none;
+        }
+
+        .auth-input:focus {
+            border-color: var(--gold-bright);
+            box-shadow: 0 0 15px var(--gold-glow);
+        }
+
+        .sync-step-box {
+            background: rgba(212, 175, 55, 0.08);
+            border: 1px dashed var(--gold-primary);
+            border-radius: 10px;
+            padding: 18px;
+            margin: 16px 0;
+            text-align: left;
+        }
+
+        .code-display {
+            font-size: 32px;
+            font-weight: 900;
+            letter-spacing: 4px;
+            color: var(--gold-bright);
+            text-align: center;
+            margin: 12px 0;
+            text-shadow: 0 0 20px var(--gold-glow);
+        }
+
+        /* Platform Tabs & Guides */
+        .platform-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 24px;
+            flex-wrap: wrap;
+        }
+
+        .plat-btn {
+            background: rgba(22, 18, 12, 0.85);
+            border: 1px solid var(--gold-border);
+            color: var(--text-muted);
+            padding: 10px 22px;
+            border-radius: 8px;
+            font-weight: 800;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .plat-btn:hover { color: white; border-color: var(--gold-bright); }
+        .plat-btn.active {
+            background: linear-gradient(135deg, #b45309, #d4af37);
+            border-color: var(--gold-bright);
+            color: #000000;
+            box-shadow: 0 0 25px var(--gold-glow);
+        }
+
         .guide-container {
             background: #14100b;
             border: 1px solid var(--gold-border);
@@ -540,11 +672,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
             gap: 22px;
         }
 
-        .step-item {
-            display: flex;
-            gap: 18px;
-        }
-
+        .step-item { display: flex; gap: 18px; }
         .step-num {
             width: 36px;
             height: 36px;
@@ -561,19 +689,8 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
             box-shadow: 0 0 12px var(--gold-glow);
         }
 
-        .step-content h4 {
-            font-size: 17px;
-            font-weight: 800;
-            color: #ffffff;
-            margin-bottom: 4px;
-        }
-
-        .step-content p {
-            font-size: 14px;
-            color: var(--text-muted);
-            line-height: 1.5;
-            font-weight: 500;
-        }
+        .step-content h4 { font-size: 17px; font-weight: 800; color: #ffffff; margin-bottom: 4px; }
+        .step-content p { font-size: 14px; color: var(--text-muted); line-height: 1.5; font-weight: 500; }
 
         .code-snippet {
             background: #050403;
@@ -603,12 +720,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
             transition: all 0.2s ease;
         }
 
-        .guide-btn:hover {
-            background: var(--gold-primary);
-            color: #000;
-            box-shadow: 0 0 15px var(--gold-glow);
-        }
-
+        .guide-btn:hover { background: var(--gold-primary); color: #000; box-shadow: 0 0 15px var(--gold-glow); }
         .apk-card {
             background: rgba(212, 175, 55, 0.08);
             border: 1px dashed var(--gold-primary);
@@ -617,7 +729,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
             margin-bottom: 22px;
         }
 
-        /* Language Welcome Modal */
+        /* Language Modal */
         .lang-modal {
             position: fixed;
             top: 0; left: 0; width: 100vw; height: 100vh;
@@ -641,19 +753,8 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
             animation: popIn 0.3s ease;
         }
 
-        .lang-box h3 {
-            font-size: 24px;
-            font-weight: 900;
-            color: var(--gold-bright);
-            margin-bottom: 6px;
-            letter-spacing: 1px;
-        }
-
-        .lang-options {
-            display: flex;
-            gap: 16px;
-            margin-top: 26px;
-        }
+        .lang-box h3 { font-size: 24px; font-weight: 900; color: var(--gold-bright); margin-bottom: 6px; letter-spacing: 1px; }
+        .lang-options { display: flex; gap: 16px; margin-top: 26px; }
 
         .lang-choice-btn {
             flex: 1;
@@ -679,13 +780,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
             transform: translateY(-4px);
         }
 
-        .choice-flag {
-            width: 50px;
-            height: 33px;
-            border-radius: 4px;
-            box-shadow: 0 0 15px rgba(0,0,0,0.6);
-            object-fit: cover;
-        }
+        .choice-flag { width: 50px; height: 33px; border-radius: 4px; box-shadow: 0 0 15px rgba(0,0,0,0.6); object-fit: cover; }
     </style>
 </head>
 <body>
@@ -730,6 +825,9 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
             </a>
         </div>
         <div class="nav-controls">
+            <button class="auth-status-btn" id="authBtn" onclick="openAuthModal()">
+                <span id="authBtnText">LINK ACCOUNT</span>
+            </button>
             <button class="audio-toggle-btn" onclick="toggleAudio()" id="audioBtn">
                 <span id="audioIcon">OFF</span> <span id="audioTxt">MUSIC</span>
             </button>
@@ -740,7 +838,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
         </div>
     </nav>
 
-    <!-- Hero Section -->
+    <!-- Hero -->
     <section class="hero">
         <img src="/logo.png" alt="VOID Private Server" class="main-logo-img">
         <p id="heroDesc">Connect to the fastest, zero-lag GTPS Cloud server. Join thousands of champions, conquer custom bosses, and trade in our rich economy.</p>
@@ -770,60 +868,153 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
         </div>
     </section>
 
-    <!-- SHOP MODAL -->
-    <div class="portal-modal" id="shopModal">
-        <div class="portal-box" style="width: 960px;">
+    <!-- IN-GAME SYNC LOGIN MODAL -->
+    <div class="portal-modal" id="authModal">
+        <div class="portal-box" style="max-width: 520px; text-align: center;">
             <div class="portal-header">
-                <h3 id="shopModalTitle">VOID STORE & ROLES CATALOG</h3>
+                <h3 id="authModalTitle">IN-GAME ACCOUNT SYNC</h3>
+                <button onclick="closeAuthModal()" style="background:transparent; border:none; color:var(--gold-bright); font-size:26px; cursor:pointer;">&times;</button>
+            </div>
+
+            <div id="authStep1">
+                <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 20px;" id="authDesc">
+                    Enter your in-game username to safely connect your character with the web store:
+                </p>
+                <input type="text" id="targetGrowId" placeholder="Enter In-Game Name..." class="auth-input">
+                <button class="btn-buy" onclick="submitLinkRequest()" id="btnStartLink">CONTINUE</button>
+            </div>
+
+            <div id="authStep2" style="display:none;">
+                <p style="color: var(--text-muted); font-size: 14px;">Your verification code has been generated:</p>
+                <div class="code-display" id="displayCode">----</div>
+                <div class="sync-step-box">
+                    <h5 style="color:var(--gold-bright); font-size:14px; margin-bottom:6px;">HOW TO VERIFY IN-GAME:</h5>
+                    <p style="font-size:13px; color:var(--text-muted); line-height:1.5;">
+                        1. Open Growtopia & login to your character.<br>
+                        2. Type <b>/accept</b> in chat.<br>
+                        3. Click <b>[ACCEPT]</b> for Code: <span id="codeSpan" style="color:var(--gold-bright); font-weight:bold;">----</span>.<br>
+                        4. This window will automatically verify!
+                    </p>
+                </div>
+                <div style="font-size:13px; color:#10b981; font-weight:bold;" id="pollingStatus">
+                    Waiting for in-game /accept confirmation...
+                </div>
+            </div>
+
+            <div id="authStep3" style="display:none;">
+                <div style="font-size:42px; color:#10b981; margin-bottom:10px;">SUCCESS</div>
+                <h4 style="font-size:20px; color:#fff; margin-bottom:8px;">Account Verified!</h4>
+                <p style="color:var(--text-muted); font-size:14px; margin-bottom:20px;">
+                    Logged in as <b id="loggedInGrowId" style="color:var(--gold-bright);"></b>
+                </p>
+                <button class="btn-buy" onclick="closeAuthModal()">CONTINUE TO STORE</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ROLES & ASSETS STORE MODAL -->
+    <div class="portal-modal" id="shopModal">
+        <div class="portal-box">
+            <div class="portal-header">
+                <h3 id="shopModalTitle">VOID STORE • ROLES & RANKS</h3>
                 <button onclick="closeShopModal()" style="background:transparent; border:none; color:var(--gold-bright); font-size:26px; cursor:pointer;">&times;</button>
             </div>
 
             <div class="shop-grid">
-                <!-- VIP Role -->
+                <!-- VIP -->
                 <div class="shop-card">
                     <div>
-                        <span class="shop-card-badge">ROLE RANK</span>
+                        <span class="shop-card-badge">ROLE RANK (ID 1)</span>
                         <h4>VIP MEMBER</h4>
-                        <div class="price">$5.00</div>
-                        <ul class="shop-perks-list" id="vipPerks">
-                            <li>Exclusive [VIP] Chat Badge & Gold Name</li>
-                            <li>+15% Extra Gems on all activities</li>
-                            <li>Access to /weather and VIP Worlds</li>
-                            <li>Auto-farm speed multiplier</li>
+                        <div class="price">100 DL ($3)</div>
+                        <ul class="shop-perks-list">
+                            <li>[VIP] Gold Chat Tag & Glow</li>
+                            <li>+15% Extra Gems Drop Boost</li>
+                            <li>Access to /weather & VIP Worlds</li>
+                            <li>Buyable in-game via <b>/buyvip</b></li>
                         </ul>
                     </div>
-                    <button class="btn-buy" onclick="contactBuy('VIP Member')">BUY VIP ROLE</button>
+                    <button class="btn-buy" onclick="contactBuy('VIP Member')">PURCHASE VIP</button>
                 </div>
 
-                <!-- MODERATOR Role -->
-                <div class="shop-card" style="border-color: var(--gold-bright); box-shadow: 0 0 25px rgba(212,175,55,0.3);">
-                    <div>
-                        <span class="shop-card-badge" style="background: var(--gold-primary); color:#000;">STAFF RANK</span>
-                        <h4>MODERATOR</h4>
-                        <div class="price">$15.00</div>
-                        <ul class="shop-perks-list" id="modPerks">
-                            <li>[MOD] Colored In-Game Title</li>
-                            <li>Full /pinfo & Player Inspection Access</li>
-                            <li>Mute, Curse, Warn & Kick Privileges</li>
-                            <li>Priority Server Slot & Staff Lounge</li>
-                        </ul>
-                    </div>
-                    <button class="btn-buy" style="background: linear-gradient(135deg, #f59e0b, #ffd700);" onclick="contactBuy('Moderator Rank')">BUY MOD ROLE</button>
-                </div>
-
-                <!-- BGL Pack -->
+                <!-- SUPER VIP -->
                 <div class="shop-card">
                     <div>
-                        <span class="shop-card-badge">CURRENCY</span>
-                        <h4>100x BGL PACK</h4>
-                        <div class="price">$10.00</div>
-                        <ul class="shop-perks-list" id="bglPerks">
-                            <li>100 Blue Gem Locks (ID 7188)</li>
-                            <li>Direct Delivery to your Inventory</li>
-                            <li>Safe Transaction & Instant Credit</li>
+                        <span class="shop-card-badge">ROLE RANK (ID 2)</span>
+                        <h4>SUPER VIP</h4>
+                        <div class="price">250 DL ($6)</div>
+                        <ul class="shop-perks-list">
+                            <li>[SUPER VIP] Cyan Glow Title</li>
+                            <li>+30% Extra Gems on all actions</li>
+                            <li>Auto-collect & Auto-farm Speed</li>
+                            <li>Exclusive SVIP Lounge World</li>
                         </ul>
                     </div>
-                    <button class="btn-buy" onclick="contactBuy('100x BGL Pack')">BUY BGL PACK</button>
+                    <button class="btn-buy" onclick="contactBuy('Super VIP')">PURCHASE SVIP</button>
+                </div>
+
+                <!-- MODERATOR -->
+                <div class="shop-card" style="border-color: var(--gold-bright); box-shadow: 0 0 25px rgba(212,175,55,0.35);">
+                    <div>
+                        <span class="shop-card-badge" style="background:var(--gold-primary); color:#000;">STAFF RANK (ID 3)</span>
+                        <h4>MODERATOR</h4>
+                        <div class="price">500 DL ($12)</div>
+                        <ul class="shop-perks-list">
+                            <li>[MOD] Official Colored Title</li>
+                            <li>Full /pinfo & Security Inspector</li>
+                            <li>Mute, Curse, Warn & Kick Rights</li>
+                            <li>Priority Slot & Staff Lounge</li>
+                        </ul>
+                    </div>
+                    <button class="btn-buy" style="background:linear-gradient(135deg, #f59e0b, #ffd700);" onclick="contactBuy('Moderator Rank')">PURCHASE MOD</button>
+                </div>
+
+                <!-- ADMIN -->
+                <div class="shop-card">
+                    <div>
+                        <span class="shop-card-badge">STAFF RANK (ID 4)</span>
+                        <h4>ADMINISTRATOR</h4>
+                        <div class="price">1,000 DL ($20)</div>
+                        <ul class="shop-perks-list">
+                            <li>[ADMIN] Red Master Title</li>
+                            <li>Global Server Broadcast access</li>
+                            <li>Ban, Pull, Unban & Curse controls</li>
+                            <li>Direct Developer contact line</li>
+                        </ul>
+                    </div>
+                    <button class="btn-buy" onclick="contactBuy('Administrator')">PURCHASE ADMIN</button>
+                </div>
+
+                <!-- COMMUNITY MANAGER -->
+                <div class="shop-card">
+                    <div>
+                        <span class="shop-card-badge">EXECUTIVE (ID 5)</span>
+                        <h4>COMMUNITY MANAGER</h4>
+                        <div class="price">20 BGL ($35)</div>
+                        <ul class="shop-perks-list">
+                            <li>[CM] Purple Executive Title</li>
+                            <li>Host Official Events & Giveaways</li>
+                            <li>Custom Item Spawning rights</li>
+                            <li>Server Economy control channel</li>
+                        </ul>
+                    </div>
+                    <button class="btn-buy" onclick="contactBuy('Community Manager')">PURCHASE CM</button>
+                </div>
+
+                <!-- DEVELOPER / GOD -->
+                <div class="shop-card">
+                    <div>
+                        <span class="shop-card-badge">ULTIMATE (ID 7 & 51)</span>
+                        <h4>DEV & GOD TIER</h4>
+                        <div class="price">CUSTOM ($50+)</div>
+                        <ul class="shop-perks-list">
+                            <li>[GOD] / [DEV] Custom Tag</li>
+                            <li>Custom Item & Set Design in server</li>
+                            <li>Full Command and System Access</li>
+                            <li>Lifetime VIP & Special Perks</li>
+                        </ul>
+                    </div>
+                    <button class="btn-buy" onclick="contactBuy('Dev & God Tier')">CONTACT OWNER</button>
                 </div>
             </div>
         </div>
@@ -1006,6 +1197,9 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
     <script>
         let currentLang = localStorage.getItem('voidps_lang') || 'en';
         let audioPlaying = false;
+        let activeRequestId = null;
+        let activePollTimer = null;
+        let verifiedUser = localStorage.getItem('voidps_verified_user') || null;
 
         function toggleAudio() {
             const audio = document.getElementById('bgAudio');
@@ -1022,6 +1216,75 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
             }
         }
 
+        function openAuthModal() {
+            if (verifiedUser) {
+                document.getElementById('authStep1').style.display = 'none';
+                document.getElementById('authStep2').style.display = 'none';
+                document.getElementById('authStep3').style.display = 'block';
+                document.getElementById('loggedInGrowId').innerText = verifiedUser;
+            } else {
+                document.getElementById('authStep1').style.display = 'block';
+                document.getElementById('authStep2').style.display = 'none';
+                document.getElementById('authStep3').style.display = 'none';
+            }
+            document.getElementById('authModal').style.display = 'flex';
+        }
+
+        function closeAuthModal() {
+            document.getElementById('authModal').style.display = 'none';
+            if (activePollTimer) clearInterval(activePollTimer);
+        }
+
+        async function submitLinkRequest() {
+            const name = document.getElementById('targetGrowId').value;
+            if (!name || name.trim() === '') {
+                alert('Please enter your in-game name!');
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/link-request', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ growId: name.trim() })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    activeRequestId = data.requestId;
+                    document.getElementById('displayCode').innerText = data.code;
+                    document.getElementById('codeSpan').innerText = data.code;
+                    document.getElementById('authStep1').style.display = 'none';
+                    document.getElementById('authStep2').style.display = 'block';
+
+                    if (activePollTimer) clearInterval(activePollTimer);
+                    activePollTimer = setInterval(pollAuthStatus, 2000);
+                }
+            } catch (e) {
+                alert('Connection error');
+            }
+        }
+
+        async function pollAuthStatus() {
+            if (!activeRequestId) return;
+            try {
+                const res = await fetch('/api/link-status/' + activeRequestId);
+                const data = await res.json();
+                if (data.status === 'VERIFIED') {
+                    clearInterval(activePollTimer);
+                    verifiedUser = data.growId;
+                    localStorage.setItem('voidps_verified_user', verifiedUser);
+                    document.getElementById('authBtnText').innerText = '👑 ' + verifiedUser;
+                    document.getElementById('loggedInGrowId').innerText = verifiedUser;
+                    document.getElementById('authStep2').style.display = 'none';
+                    document.getElementById('authStep3').style.display = 'block';
+                }
+            } catch (e) {}
+        }
+
+        if (verifiedUser) {
+            document.getElementById('authBtnText').innerText = '👑 ' + verifiedUser;
+        }
+
         const TRANSLATIONS = {
             en: {
                 flagSrc: 'https://flagcdn.com/w80/gb.png',
@@ -1032,7 +1295,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
                 lblStatus: 'SERVER STATUS',
                 lblOnline: 'ONLINE PLAYERS',
                 modalTitle: 'HOW TO PLAY ON VOIDPS',
-                shopTitle: 'VOID STORE & ROLES CATALOG',
+                shopTitle: 'VOID STORE • ROLES & RANKS',
                 winStep1T: 'Run Notepad as Administrator',
                 winStep1D: 'Right-click Notepad and choose "Run as Administrator".',
                 winStep2T: 'Open hosts file',
@@ -1080,7 +1343,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
                 lblStatus: 'STATUS SERVER',
                 lblOnline: 'PEMAIN ONLINE',
                 modalTitle: 'CARA BERMAIN DI VOIDPS',
-                shopTitle: 'TOKO VOIDPS & KATALOG ROLE',
+                shopTitle: 'TOKO VOIDPS • KATALOG ROLE',
                 winStep1T: 'Buka Notepad sebagai Administrator',
                 winStep1D: 'Klik kanan Notepad lalu pilih "Run as Administrator".',
                 winStep2T: 'Buka file hosts',
@@ -1192,16 +1455,12 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
         }
         applyTranslations();
 
-        function openShopModal() {
-            document.getElementById('shopModal').style.display = 'flex';
-        }
-
-        function closeShopModal() {
-            document.getElementById('shopModal').style.display = 'none';
-        }
+        function openShopModal() { document.getElementById('shopModal').style.display = 'flex'; }
+        function closeShopModal() { document.getElementById('shopModal').style.display = 'none'; }
 
         function contactBuy(item) {
-            alert('To purchase ' + item + ', please join our Discord or message our WhatsApp staff!');
+            const userTag = verifiedUser ? ' (Linked Character: ' + verifiedUser + ')' : '';
+            alert('To purchase ' + item + userTag + ', please join our Discord or message WhatsApp staff!');
         }
 
         function openTutorial(platform) {
@@ -1209,9 +1468,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
             switchPlatform(platform || 'windows');
         }
 
-        function closeTutorial() {
-            document.getElementById('tutorialModal').style.display = 'none';
-        }
+        function closeTutorial() { document.getElementById('tutorialModal').style.display = 'none'; }
 
         function switchPlatform(plat) {
             document.querySelectorAll('.guide-content').forEach(el => el.style.display = 'none');
@@ -1226,7 +1483,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
             alert('Copied to clipboard!');
         }
 
-        /* Gold Particle Animation */
+        /* Gold Particles */
         const canvas = document.getElementById('gold-canvas');
         const ctx = canvas.getContext('2d');
         let particles = [];
@@ -1310,5 +1567,5 @@ app.get('/', (req, res) => {
 });
 
 app.listen(PORT, () => {
-    console.log(`VOIDPS Luxury Gold Portal running on port ${PORT}`);
+    console.log(`VOIDPS Portal running on port ${PORT}`);
 });
