@@ -357,19 +357,27 @@ app.get('/api/auth/me', (req, res) => {
     }
 
     let liveStats = null;
+    let liveBgl = user.bglBalance || 0;
     if (user.linkedGrowId && serverData.players && Array.isArray(serverData.players)) {
         const p = serverData.players.find(x => (x.name || '').toLowerCase() === user.linkedGrowId.toLowerCase());
         if (p) {
+            liveBgl = Number(p.bgl) || 0;
+            if (user.bglBalance !== liveBgl) {
+                user.bglBalance = liveBgl;
+                saveDatabase(db);
+            }
             liveStats = {
                 isOnline: true,
                 world: p.world || 'EXIT',
                 gems: p.gems || 0,
                 level: p.level || 1,
-                wl: p.wl || 0
+                wl: p.wl || 0,
+                bgl: liveBgl
             };
         } else {
             liveStats = {
-                isOnline: false
+                isOnline: false,
+                bgl: liveBgl
             };
         }
     }
@@ -380,7 +388,7 @@ app.get('/api/auth/me', (req, res) => {
             username: user.username,
             uniqueCode: user.uniqueCode,
             linkedGrowId: user.linkedGrowId,
-            bglBalance: user.bglBalance || 0,
+            bglBalance: liveBgl,
             createdAt: user.createdAt,
             liveStats: liveStats
         }
